@@ -1,0 +1,20 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# .NET
+bin/
+obj/
+
+# Node/Chrome extension
+node_modules/
+
+# OS/editor
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Env/secrets
+.env
+*.key
