@@ -1,0 +1,3 @@
+{
+  "_comment": "Declarative rule definitions consumed by policy_engine.py, e.g. IF containsInternalArchitecture == true AND destination == ChatGPT THEN BLOCK."
+}
