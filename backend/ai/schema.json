@@ -1,0 +1,3 @@
+{
+  "_comment": "JSON Schema defining the required structure of the ECI classifier's output (intent, documentType, requiresEnterpriseKnowledge, containsInternalArchitecture, containsImplementationDetails, containsSourceCode, containsCustomerData, containsSecrets, confidence, reasoning)."
+}

@@ -1,0 +1,9 @@
+# requirements.txt
+# Python dependencies for the backend.
+fastapi
+uvicorn
+pydantic
+presidio-analyzer
+presidio-anonymizer
+spacy
+requests
