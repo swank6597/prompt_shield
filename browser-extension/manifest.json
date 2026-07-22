@@ -1,0 +1,64 @@
+﻿{
+  "manifest_version": 3,
+  "name": "Prompt Guardian",
+  "description": "Observe supported AI chat prompts before sending them.",
+  "version": "3.0.0",
+  "permissions": [],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://gemini.google.com/*",
+    "https://claude.ai/*",
+    "https://chat.deepseek.com/*",
+    "https://chat.deepseek.ai/*",
+    "https://copilot.microsoft.com/*",
+    "https://copilot.cloud.microsoft/*",
+    "https://www.bing.com/chat*",
+    "http://localhost:8080/*"
+  ],
+  "background": {
+    "service_worker": "background/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://gemini.google.com/*",
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://chat.deepseek.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://copilot.cloud.microsoft/*",
+        "https://www.bing.com/chat*"
+      ],
+      "js": ["content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/*.js", "utils/*.js"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://gemini.google.com/*",
+        "https://claude.ai/*",
+        "https://chat.deepseek.com/*",
+        "https://chat.deepseek.ai/*",
+        "https://copilot.microsoft.com/*",
+        "https://copilot.cloud.microsoft/*",
+        "https://www.bing.com/chat*"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}
