@@ -14,7 +14,7 @@
     "https://copilot.microsoft.com/*",
     "https://copilot.cloud.microsoft/*",
     "https://www.bing.com/chat*",
-    "http://localhost:8080/*"
+    "http://localhost:8081/*"
   ],
   "background": {
     "service_worker": "background/background.js",

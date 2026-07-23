@@ -112,4 +112,22 @@ def get_recognizers():
         )
     )
 
+    # -------------------------
+    # US Phone Number
+    # -------------------------
+    recognizers.append(
+        PatternRecognizer(
+            supported_entity="PHONE_NUMBER",
+            supported_language="en",
+            patterns=[
+                Pattern(
+                    name="US_PHONE",
+                    regex=r"\b(?:\+1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b",
+                    score=0.85
+                )
+            ],
+            context=["phone", "mobile", "cell", "tel"]
+        )
+    )
+
     return recognizers

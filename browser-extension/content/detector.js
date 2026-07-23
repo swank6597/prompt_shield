@@ -220,6 +220,7 @@ function scoreSendCandidate(element, hints) {
  *   findSendButton: (root: Document | Element | ShadowRoot, promptTextArea?: HTMLElement | null) => HTMLElement | null,
  *   isSendButtonReady: (element: HTMLElement | null) => boolean,
  *   readPromptText: (element: HTMLElement | null) => string,
+ *   writePromptText: (element: HTMLElement | null, text: string) => boolean,
  *   shouldInterceptEnter: (event: KeyboardEvent) => boolean,
  *   isVisibleElement: (element: Element) => boolean,
  *   getSiteLabel: () => string
@@ -328,6 +329,51 @@ export function createPromptGuardianDetector(site) {
   }
 
   /**
+   * Writes sanitized prompt text back into the composer.
+   *
+   * @param {HTMLElement | null} element
+   * @param {string} text
+   * @returns {boolean}
+   */
+  function writePromptText(element, text) {
+    if (!isHTMLElement(element)) {
+      return false;
+    }
+
+    if ("value" in element && typeof element.value === "string") {
+      element.value = text;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    }
+
+    element.focus();
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    if (typeof document.execCommand === "function") {
+      document.execCommand("insertText", false, text);
+    } else {
+      element.textContent = text;
+    }
+
+    element.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        cancelable: true,
+        inputType: "insertText",
+        data: text
+      })
+    );
+
+    return true;
+  }
+
+  /**
    * Detects whether the key event should be treated as a send attempt.
    *
    * @param {KeyboardEvent} event
@@ -342,6 +388,7 @@ export function createPromptGuardianDetector(site) {
     findSendButton,
     isSendButtonReady,
     readPromptText,
+    writePromptText,
     shouldInterceptEnter,
     isVisibleElement,
     getSiteLabel: () => site.label

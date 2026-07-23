@@ -7,11 +7,20 @@
 # keyword_search.py's interface.
 
 import os
+import sys
 
 # knowledge/ lives at the project root, two levels up from backend/ai/
 KNOWLEDGE_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), "..", "..", "knowledge")
 )
+
+_BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from utils.logger import get_logger  # noqa: E402
+
+log = get_logger("context_loader")
 
 _cache = None  # simple in-memory cache; reset with force_reload=True
 
@@ -30,6 +39,7 @@ def load_knowledge_base(force_reload: bool = False) -> list[dict]:
     """
     global _cache
     if _cache is not None and not force_reload:
+        log.debug("Using cached knowledge base (%d docs)", len(_cache))
         return _cache
 
     docs = []
@@ -52,6 +62,7 @@ def load_knowledge_base(force_reload: bool = False) -> list[dict]:
                 "content": content,
             })
 
+    log.info("Loaded %d knowledge document(s) from %s", len(docs), KNOWLEDGE_DIR)
     _cache = docs
     return docs
 
