@@ -4,10 +4,20 @@
 # to select the most relevant snippet(s). No embeddings/vector DB -
 # that's explicitly future work per the project doc.
 
+import os
 import re
+import sys
 from collections import Counter
 
 from context_loader import load_knowledge_base
+
+_BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from utils.logger import get_logger  # noqa: E402
+
+log = get_logger("keyword_search")
 
 # Common words that carry no topical signal - excluded so they don't
 # inflate every document's score equally.
@@ -52,7 +62,18 @@ def search(prompt: str, top_k: int = 2, min_score: int = 1) -> list[dict]:
             scored.append({**doc, "score": score})
 
     scored.sort(key=lambda d: d["score"], reverse=True)
-    return scored[:top_k]
+    top_matches = scored[:top_k]
+
+    if not top_matches:
+        log.debug("No knowledge doc scored >= min_score=%d for this prompt", min_score)
+    else:
+        log.debug(
+            "Matched %d/%d doc(s) >= min_score=%d, returning top %d: %s",
+            len(scored), len(documents), min_score, len(top_matches),
+            [(d["filename"], d["score"]) for d in top_matches],
+        )
+
+    return top_matches
 
 
 if __name__ == "__main__":

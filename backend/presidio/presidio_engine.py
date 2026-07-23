@@ -11,6 +11,9 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
 from presidio.recognizers.registry import register_all
+from utils.logger import get_logger
+
+log = get_logger("presidio")
 
 # Minimum confidence score to keep a detection (filters out low-confidence noise).
 MIN_SCORE = 0.85
@@ -18,8 +21,10 @@ MIN_SCORE = 0.85
 # ----------------------------------------------------
 # Initialize Presidio (runs once, at import time)
 # ----------------------------------------------------
+log.info("Initializing Presidio AnalyzerEngine (this loads the spaCy NLP model)...")
 analyzer = AnalyzerEngine()
 register_all(analyzer)
+log.info("Presidio ready: %d recognizers registered", len(analyzer.registry.recognizers))
 
 anonymizer = AnonymizerEngine()
 
@@ -44,8 +49,16 @@ def analyze_text(text: str) -> dict:
         }
     """
     results = analyzer.analyze(text=text, language="en")
+    log.debug("Raw analyzer results: %d (before min-score filter)", len(results))
 
     # Filter out low-confidence detections
+    below_threshold = [r for r in results if r.score < MIN_SCORE]
+    if below_threshold:
+        log.debug(
+            "Dropped %d low-confidence detection(s) below MIN_SCORE=%.2f: %s",
+            len(below_threshold), MIN_SCORE,
+            [(r.entity_type, round(r.score, 2)) for r in below_threshold],
+        )
     results = [r for r in results if r.score >= MIN_SCORE]
 
     anonymized = anonymizer.anonymize(text=text, analyzer_results=results)

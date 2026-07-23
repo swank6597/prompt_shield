@@ -17,6 +17,9 @@ if _BACKEND_DIR not in sys.path:
     sys.path.insert(0, _BACKEND_DIR)
 
 from config import OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT_SECONDS, OLLAMA_MAX_RETRIES
+from utils.logger import get_logger
+
+log = get_logger("ollama_client")
 
 MODEL_NAME = OLLAMA_MODEL
 TIMEOUT_SECONDS = OLLAMA_TIMEOUT_SECONDS
@@ -72,20 +75,47 @@ def call_ollama(
     attempts = max_retries + 1
 
     for attempt in range(1, attempts + 1):
+        log.debug(
+            "POST %s/api/chat (model=%s, attempt=%d/%d, system_len=%d, user_len=%d)",
+            OLLAMA_HOST, MODEL_NAME, attempt, attempts, len(system_prompt), len(user_prompt),
+        )
         try:
+            request_start = time.perf_counter()
             response = requests.post(
                 f"{OLLAMA_HOST}/api/chat", json=payload, timeout=timeout
             )
+            elapsed_ms = (time.perf_counter() - request_start) * 1000
             response.raise_for_status()
             data = response.json()
-            return data["message"]["content"]
+            content = data["message"]["content"]
+
+            # A small quantized model under CPU load occasionally has its
+            # runner stall mid-generation and Ollama returns HTTP 200 with
+            # an empty content string rather than an error - raise_for_status()
+            # doesn't catch this. Treat it as a retryable failure here rather
+            # than handing an empty string back to the caller, who would
+            # otherwise only discover the problem one layer up when JSON
+            # parsing fails on an empty string.
+            if not content or not content.strip():
+                raise ValueError("Ollama returned empty message content")
+
+            log.debug("Ollama responded in %.0fms (content_len=%d)", elapsed_ms, len(content))
+            return content
 
         except (requests.RequestException, KeyError, ValueError) as e:
             last_error = e
             if attempt < attempts:
+                log.warning(
+                    "Ollama call failed (attempt %d/%d): %s - retrying in %ds",
+                    attempt, attempts, e, attempt,
+                )
                 time.sleep(attempt)  # simple linear backoff: 1s, 2s, ...
                 continue
 
+    log.error(
+        "Ollama call failed after %d attempt(s) (host=%s, model=%s): %s",
+        attempts, OLLAMA_HOST, MODEL_NAME, last_error,
+    )
     raise OllamaError(
         f"Ollama call failed after {attempts} attempt(s) "
         f"(host={OLLAMA_HOST}, model={MODEL_NAME}): {last_error}"
