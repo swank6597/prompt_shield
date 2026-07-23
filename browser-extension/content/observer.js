@@ -1,4 +1,6 @@
-﻿const PROMPT_OBSERVER_CONFIG = {
+﻿import { resolveScanIssues } from "../utils/scan-utils.js";
+
+const PROMPT_OBSERVER_CONFIG = {
   childList: true,
   subtree: true,
   attributes: true,
@@ -21,14 +23,14 @@
  * @param {{
  *   Logger: { info: (message: string) => void, warn: (message: string) => void, error: (message: string) => void },
  *   detector: ReturnType<typeof import("./detector.js").createPromptGuardianDetector>,
- *   scanClient: { scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, raw?: unknown }> },
- *   warningDialog: { show: (reason: string) => void, hide: () => void },
+ *   scanClient: { scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, raw?: unknown }> },
+ *   reviewDialog: { show: (payload: import("./modal.js").ReviewDialogPayload) => void, hide: () => void },
  *   documentRef: Document,
  *   windowRef: Window
  * }} params
- * @returns {{ start: () => void, stop: () => void, allowBlockedSend: () => boolean }}
+ * @returns {{ start: () => void, stop: () => void, cancelPendingSend: () => void, sendSanitizedPrompt: () => Promise<boolean>, sendOriginalPrompt: () => Promise<boolean> }}
  */
-export function createPromptGuardianObserver({ Logger, detector, scanClient, warningDialog, documentRef, windowRef }) {
+export function createPromptGuardianObserver({ Logger, detector, scanClient, reviewDialog, documentRef, windowRef }) {
   const state = {
     observer: null,
     refreshScheduled: false,
@@ -36,9 +38,12 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
     sendButton: null,
     promptListenerController: null,
     sendButtonListenerController: null,
+    documentListenerController: null,
     sendAttemptInFlight: false,
     bypassOnce: false,
     pendingReplay: null,
+    pendingOriginalPrompt: null,
+    pendingSanitizedPrompt: null,
     sendButtonReadyLogged: false
   };
 
@@ -48,28 +53,72 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
   function clearBoundListeners() {
     state.promptListenerController?.abort();
     state.sendButtonListenerController?.abort();
+    state.documentListenerController?.abort();
     state.promptListenerController = null;
     state.sendButtonListenerController = null;
+    state.documentListenerController = null;
   }
 
   /**
-   * Reads and logs the current prompt text.
+   * Returns true when the event target belongs to the active prompt composer.
    *
-   * @param {HTMLElement} promptTextArea
+   * @param {EventTarget | null} target
+   * @returns {boolean}
    */
-  function logCurrentPrompt(promptTextArea) {
-    const promptText = detector.readPromptText(promptTextArea);
-    Logger.info("Prompt Updated");
-    Logger.info(`Current Prompt:\n\n${promptText || "(empty)"}`);
+  function isPromptEventTarget(target) {
+    if (!state.promptTextArea || !(target instanceof Node)) {
+      return false;
+    }
+
+    return state.promptTextArea === target || state.promptTextArea.contains(target);
   }
 
   /**
-   * Creates the replay action used after SAFE or Send Anyway.
+   * Waits briefly so React/contenteditable state can sync before replaying send.
    *
-   * @returns {() => void}
+   * @returns {Promise<void>}
+   */
+  function waitForComposerSync() {
+    return new Promise((resolve) => {
+      windowRef.requestAnimationFrame(() => {
+        windowRef.setTimeout(resolve, 0);
+      });
+    });
+  }
+
+  /**
+   * Replaces the composer text with the sanitized prompt.
+   *
+   * @param {string} sanitizedPrompt
+   * @returns {Promise<boolean>}
+   */
+  async function applySanitizedPrompt(sanitizedPrompt) {
+    const promptTextArea = state.promptTextArea;
+    if (!promptTextArea) {
+      return false;
+    }
+
+    const applied = detector.writePromptText(promptTextArea, sanitizedPrompt);
+    if (!applied) {
+      Logger.warn("Failed to write sanitized prompt into composer");
+      return false;
+    }
+
+    await waitForComposerSync();
+    Logger.info("Sanitized Prompt Applied");
+    Logger.info(`Sanitized Prompt:\n\n${sanitizedPrompt}`);
+    return true;
+  }
+
+  /**
+   * Replays the send action after SAFE or sanitized approval.
+   *
+   * @returns {() => Promise<void>}
    */
   function createReplayAction() {
-    return () => {
+    return async () => {
+      await waitForComposerSync();
+
       const sendButton = state.sendButton;
       const promptTextArea = state.promptTextArea;
 
@@ -88,6 +137,138 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
         form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
       }
     };
+  }
+
+  /**
+   * Clears pending send state after review or cancellation.
+   */
+  function clearPendingSendState() {
+    state.pendingReplay = null;
+    state.pendingOriginalPrompt = null;
+    state.pendingSanitizedPrompt = null;
+    state.sendAttemptInFlight = false;
+  }
+
+  /**
+   * Replays the pending send action once.
+   *
+   * @returns {Promise<boolean>}
+   */
+  async function replayPendingSend() {
+    const replay = state.pendingReplay;
+    if (!replay) {
+      Logger.warn("No pending send action to replay");
+      clearPendingSendState();
+      return false;
+    }
+
+    state.bypassOnce = true;
+    state.sendAttemptInFlight = false;
+    state.pendingReplay = null;
+    state.pendingOriginalPrompt = null;
+    state.pendingSanitizedPrompt = null;
+
+    await replay();
+    return true;
+  }
+
+  /**
+   * Cancels the pending send after the user closes the review dialog.
+   */
+  function cancelPendingSend() {
+    reviewDialog.hide();
+    clearPendingSendState();
+    Logger.info("Pending send cancelled");
+  }
+
+  /**
+   * Sends the sanitized prompt after user approval.
+   *
+   * @returns {Promise<boolean>}
+   */
+  async function sendSanitizedPrompt() {
+    const sanitizedPrompt = state.pendingSanitizedPrompt;
+    if (!sanitizedPrompt) {
+      Logger.warn("No sanitized prompt available to send");
+      return false;
+    }
+
+    const applied = await applySanitizedPrompt(sanitizedPrompt);
+    if (!applied) {
+      reviewDialog.show({
+        status: "BLOCK",
+        reason: "Unable to apply the sanitized prompt in the chat composer.",
+        originalPrompt: state.pendingOriginalPrompt ?? "",
+        sanitizedPrompt,
+        issues: []
+      });
+      return false;
+    }
+
+    return replayPendingSend();
+  }
+
+  /**
+   * Sends the original prompt after explicit user override.
+   *
+   * @returns {Promise<boolean>}
+   */
+  async function sendOriginalPrompt() {
+    if (state.pendingOriginalPrompt && state.promptTextArea) {
+      detector.writePromptText(state.promptTextArea, state.pendingOriginalPrompt);
+      await waitForComposerSync();
+    }
+
+    return replayPendingSend();
+  }
+
+  /**
+   * Shows the review dialog and waits for the user's decision.
+   *
+   * @param {{
+   *   status: string,
+   *   reason?: string,
+   *   originalPrompt: string,
+   *   sanitizedPrompt: string,
+   *   issues?: Array<{ entityType: string, value: string, score?: number }>
+   * }} payload
+   */
+  function showReviewDialog(payload) {
+    state.pendingReplay = createReplayAction();
+    state.sendAttemptInFlight = false;
+    state.pendingSanitizedPrompt = payload.sanitizedPrompt;
+
+    reviewDialog.show({
+      status: payload.status,
+      reason: payload.reason,
+      originalPrompt: payload.originalPrompt,
+      sanitizedPrompt: payload.sanitizedPrompt,
+      issues: payload.issues ?? []
+    });
+  }
+
+  /**
+   * Allows a safe prompt to continue without review.
+   *
+   * @param {string} promptText
+   * @returns {Promise<void>}
+   */
+  async function allowSafePromptSend() {
+    state.bypassOnce = true;
+    state.sendAttemptInFlight = false;
+    clearPendingSendState();
+    await createReplayAction()();
+  }
+
+  /**
+   * Reads and logs the current prompt text.
+   *
+   * @param {HTMLElement} promptTextArea
+   */
+  function logCurrentPrompt(promptTextArea) {
+    const promptText = detector.readPromptText(promptTextArea);
+    Logger.info("Prompt Updated");
+    Logger.info(`Current Prompt:\n\n${promptText || "(empty)"}`);
   }
 
   /**
@@ -119,12 +300,12 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
 
         handleSendAttempt(event, "enter");
       },
-      options
+      { ...options, capture: true }
     );
   }
 
   /**
-   * Binds send-button click interception.
+   * Binds send-button interception.
    *
    * @param {HTMLElement} sendButton
    */
@@ -132,12 +313,51 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
     state.sendButtonListenerController?.abort();
     state.sendButtonListenerController = new AbortController();
 
-    sendButton.addEventListener(
-      "click",
+    const options = { signal: state.sendButtonListenerController.signal, capture: true };
+    const handler = (event) => {
+      handleSendAttempt(event, "button");
+    };
+
+    sendButton.addEventListener("pointerdown", handler, options);
+    sendButton.addEventListener("click", handler, options);
+  }
+
+  /**
+   * Binds document-level interception for Enter and form submit.
+   */
+  function bindDocumentListeners() {
+    state.documentListenerController?.abort();
+    state.documentListenerController = new AbortController();
+
+    const options = { signal: state.documentListenerController.signal, capture: true };
+
+    documentRef.addEventListener(
+      "keydown",
       (event) => {
-        handleSendAttempt(event, "button");
+        if (!isPromptEventTarget(event.target) || !detector.shouldInterceptEnter(event)) {
+          return;
+        }
+
+        handleSendAttempt(event, "enter");
       },
-      { signal: state.sendButtonListenerController.signal, capture: true }
+      options
+    );
+
+    documentRef.addEventListener(
+      "submit",
+      (event) => {
+        if (!state.promptTextArea) {
+          return;
+        }
+
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.contains(state.promptTextArea)) {
+          return;
+        }
+
+        handleSendAttempt(event, "submit");
+      },
+      options
     );
   }
 
@@ -169,7 +389,7 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
    * Performs the actual prompt scan and blocks or allows sending.
    *
    * @param {Event} event
-   * @param {"button" | "enter"} source
+   * @param {"button" | "enter" | "submit"} source
    */
   async function handleSendAttempt(event, source) {
     if (state.bypassOnce) {
@@ -188,48 +408,58 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
     event.stopPropagation();
     event.stopImmediatePropagation();
 
-    Logger.info(source === "enter" ? "Enter Pressed" : "Send Button Clicked");
+    Logger.info(
+      source === "enter" ? "Enter Pressed" : source === "submit" ? "Form Submit Intercepted" : "Send Button Clicked"
+    );
 
     const promptText = detector.readPromptText(state.promptTextArea);
+    state.pendingOriginalPrompt = promptText;
     Logger.info("Prompt Captured Before Send");
     Logger.info(`Current Prompt:\n\n${promptText || "(empty)"}`);
+
+    if (!promptText.trim()) {
+      state.sendAttemptInFlight = false;
+      return;
+    }
 
     try {
       const result = await scanClient.scanPrompt(promptText);
       const normalizedStatus = String(result.status ?? "SAFE").toUpperCase();
+      const sanitizedPrompt =
+        typeof result.sanitizedPrompt === "string" ? result.sanitizedPrompt : promptText;
 
       if (normalizedStatus === "SAFE") {
-        Logger.info("Milestone 5 Decision: SAFE");
-        state.pendingReplay = createReplayAction();
-        state.bypassOnce = true;
-        state.sendAttemptInFlight = false;
-        state.pendingReplay?.();
-        state.pendingReplay = null;
+        Logger.info("Decision: SAFE");
+        await allowSafePromptSend();
         return;
       }
 
-      if (normalizedStatus === "BLOCK") {
-        Logger.warn("Milestone 5 Decision: BLOCK");
-        state.pendingReplay = createReplayAction();
-        warningDialog.show(result.reason || "Sensitive Data Detected");
-        state.sendAttemptInFlight = false;
+      if (normalizedStatus === "SANITIZE" || normalizedStatus === "BLOCK") {
+        Logger.info(`Decision: ${normalizedStatus}`);
+        if (result.reason) {
+          Logger.info(result.reason);
+        }
+        showReviewDialog({
+          status: normalizedStatus,
+          reason: result.reason,
+          originalPrompt: promptText,
+          sanitizedPrompt,
+          issues: resolveScanIssues({
+            issues: result.issues,
+            reason: result.reason,
+            originalPrompt: promptText,
+            sanitizedPrompt
+          })
+        });
         return;
       }
 
       Logger.warn(`Unexpected API status: ${normalizedStatus}. Allowing send.`);
-      state.pendingReplay = createReplayAction();
-      state.bypassOnce = true;
-      state.sendAttemptInFlight = false;
-      state.pendingReplay?.();
-      state.pendingReplay = null;
+      await allowSafePromptSend();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       Logger.warn(`Scan Failed, allowing send: ${message}`);
-      state.pendingReplay = createReplayAction();
-      state.bypassOnce = true;
-      state.sendAttemptInFlight = false;
-      state.pendingReplay?.();
-      state.pendingReplay = null;
+      await allowSafePromptSend();
     }
   }
 
@@ -275,30 +505,11 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
   }
 
   /**
-   * Allows the blocked prompt to continue once.
-   *
-   * @returns {boolean}
-   */
-  function allowBlockedSend() {
-    if (!state.pendingReplay) {
-      return false;
-    }
-
-    warningDialog.hide();
-    state.bypassOnce = true;
-    state.sendAttemptInFlight = false;
-
-    const replay = state.pendingReplay;
-    state.pendingReplay = null;
-    replay();
-    return true;
-  }
-
-  /**
    * Starts the DOM observer.
    */
   function start() {
     Logger.info("Waiting for Prompt Area...");
+    bindDocumentListeners();
     refresh();
 
     state.observer = new MutationObserver(() => {
@@ -308,19 +519,19 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, war
     state.observer.observe(documentRef.documentElement || documentRef.body, PROMPT_OBSERVER_CONFIG);
   }
 
-  /**
-   * Stops the DOM observer and disconnects listeners.
-   */
   function stop() {
     state.observer?.disconnect();
     clearBoundListeners();
-    warningDialog.hide();
+    reviewDialog.hide();
+    clearPendingSendState();
   }
 
   return {
     start,
     stop,
-    allowBlockedSend
+    cancelPendingSend,
+    sendSanitizedPrompt,
+    sendOriginalPrompt
   };
 }
 

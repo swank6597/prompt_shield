@@ -27,7 +27,7 @@ const COMMON_SCOPE_SELECTORS = [
   "[data-testid*='prompt' i]"
 ];
 
-const DEFAULT_API_ENDPOINT = "http://localhost:8080/api/scan";
+const DEFAULT_API_ENDPOINT = "http://localhost:8081/api/scan";
 
 /**
  * Returns whether the hostname matches an expected host or subdomain.
@@ -71,10 +71,10 @@ function createSiteDefinition(site) {
   return {
     id: site.id,
     label: site.label,
-    promptSelectors: [...COMMON_PROMPT_SELECTORS],
-    sendSelectors: [...COMMON_SEND_SELECTORS],
-    promptScopeSelectors: [...COMMON_SCOPE_SELECTORS],
-    sendScopeSelectors: [...COMMON_SCOPE_SELECTORS],
+    promptSelectors: site.promptSelectors ?? [...COMMON_PROMPT_SELECTORS],
+    sendSelectors: site.sendSelectors ?? [...COMMON_SEND_SELECTORS],
+    promptScopeSelectors: site.promptScopeSelectors ?? [...COMMON_SCOPE_SELECTORS],
+    sendScopeSelectors: site.sendScopeSelectors ?? [...COMMON_SCOPE_SELECTORS],
     promptHints: [...site.promptHints],
     sendHints: [...site.sendHints],
     apiEndpoint: site.apiEndpoint ?? DEFAULT_API_ENDPOINT,
@@ -98,6 +98,21 @@ export const SITE_DEFINITIONS = [
     id: "chatgpt",
     label: "ChatGPT",
     hosts: ["chatgpt.com", "chat.openai.com"],
+    promptSelectors: [
+      "#prompt-textarea",
+      "div#prompt-textarea[contenteditable='true']",
+      "textarea#prompt-textarea",
+      "textarea[data-id='root']",
+      "div.ProseMirror[contenteditable='true']",
+      ...COMMON_PROMPT_SELECTORS
+    ],
+    sendSelectors: [
+      "[data-testid='send-button']",
+      "#composer-submit-button",
+      "button[aria-label='Send prompt']",
+      "button[aria-label='Send message']",
+      ...COMMON_SEND_SELECTORS
+    ],
     promptHints: ["message", "prompt", "chatgpt", "ask"],
     sendHints: ["send", "submit"]
   }),
@@ -105,6 +120,16 @@ export const SITE_DEFINITIONS = [
     id: "gemini",
     label: "Gemini",
     hosts: ["gemini.google.com"],
+    promptSelectors: [
+      "div.ql-editor[contenteditable='true']",
+      "rich-textarea div[contenteditable='true']",
+      ...COMMON_PROMPT_SELECTORS
+    ],
+    sendSelectors: [
+      "button[aria-label*='Send' i]",
+      "button.send-button",
+      ...COMMON_SEND_SELECTORS
+    ],
     promptHints: ["gemini", "ask", "message", "prompt"],
     sendHints: ["send", "submit", "ask"]
   }),
@@ -112,6 +137,16 @@ export const SITE_DEFINITIONS = [
     id: "claude",
     label: "Claude",
     hosts: ["claude.ai"],
+    promptSelectors: [
+      "div[contenteditable='true'][enterkeyhint='send']",
+      "fieldset div[contenteditable='true']",
+      ...COMMON_PROMPT_SELECTORS
+    ],
+    sendSelectors: [
+      "button[aria-label*='Send' i]",
+      "button[data-testid*='send' i]",
+      ...COMMON_SEND_SELECTORS
+    ],
     promptHints: ["claude", "ask", "message", "prompt"],
     sendHints: ["send", "submit"]
   }),

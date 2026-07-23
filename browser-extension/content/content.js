@@ -19,7 +19,7 @@
   const { findSiteDefinition } = siteDefinitionsModule;
   const { createPromptGuardianDetector } = detectorModule;
   const { createPromptScanClient } = apiClientModule;
-  const { createWarningDialog } = modalModule;
+  const { createReviewDialog } = modalModule;
   const { createPromptGuardianObserver } = observerModule;
 
   Logger.info("Extension Loaded");
@@ -39,13 +39,18 @@
   });
 
   let observer = null;
-  const warningDialog = createWarningDialog({
+  const reviewDialog = createReviewDialog({
     onCancel() {
-      Logger.info("Warning Dialog Closed");
+      Logger.info("Review Dialog Cancelled");
+      observer?.cancelPendingSend();
     },
-    onSendAnyway() {
-      Logger.info("Send Anyway Clicked");
-      observer?.allowBlockedSend();
+    onSendSanitized() {
+      Logger.info("Send Sanitized Clicked");
+      void observer?.sendSanitizedPrompt();
+    },
+    onSendOriginal() {
+      Logger.info("Send Original Clicked");
+      void observer?.sendOriginalPrompt();
     }
   });
 
@@ -53,7 +58,7 @@
     Logger,
     detector,
     scanClient,
-    warningDialog,
+    reviewDialog,
     documentRef: document,
     windowRef: window
   });
