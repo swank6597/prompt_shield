@@ -29,6 +29,27 @@ log.info("Presidio ready: %d recognizers registered", len(analyzer.registry.reco
 anonymizer = AnonymizerEngine()
 
 
+def _resolve_overlaps(results: list) -> list:
+    """
+    Presidio runs every registered recognizer independently and does not
+    deduplicate overlapping matches from different recognizers/entity
+    types by design - e.g. our custom AADHAAR_NUMBER pattern recognizer
+    and spaCy's generic NER (which sometimes mistakes a digit-and-space
+    string it can't otherwise classify for a DATE_TIME) can both match
+    the exact same span. Keep only the highest-confidence match per
+    overlapping span (longer span wins on a score tie) so the same text
+    isn't reported - or masked - twice under two different entity types.
+    """
+    ordered = sorted(results, key=lambda r: (r.score, r.end - r.start), reverse=True)
+    kept = []
+    for r in ordered:
+        if not any(r.start < k.end and k.start < r.end for k in kept):
+            kept.append(r)
+
+    kept.sort(key=lambda r: r.start)
+    return kept
+
+
 def analyze_text(text: str) -> dict:
     """
     Runs Presidio analysis + anonymization on the given text.
@@ -60,6 +81,16 @@ def analyze_text(text: str) -> dict:
             [(r.entity_type, round(r.score, 2)) for r in below_threshold],
         )
     results = [r for r in results if r.score >= MIN_SCORE]
+
+    deduped = _resolve_overlaps(results)
+    dropped_overlaps = len(results) - len(deduped)
+    if dropped_overlaps:
+        log.debug(
+            "Dropped %d overlapping detection(s) (same span, lower-confidence recognizer): %s",
+            dropped_overlaps,
+            [(r.entity_type, round(r.score, 2)) for r in results if r not in deduped],
+        )
+    results = deduped
 
     anonymized = anonymizer.anonymize(text=text, analyzer_results=results)
 
