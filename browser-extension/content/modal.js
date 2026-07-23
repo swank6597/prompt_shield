@@ -12,13 +12,40 @@ import { resolveScanIssues } from "../utils/scan-utils.js";
 
 /**
  * @typedef {{
+ *   intent?: string,
+ *   documentType?: string,
+ *   requiresEnterpriseKnowledge?: boolean,
+ *   containsInternalArchitecture?: boolean,
+ *   containsImplementationDetails?: boolean,
+ *   containsSourceCode?: boolean,
+ *   containsCustomerData?: boolean,
+ *   containsSecrets?: boolean,
+ *   confidence?: number,
+ *   reasoning?: string[]
+ * }} EciResult
+ */
+
+/**
+ * @typedef {{
  *   status?: string,
  *   reason?: string,
  *   originalPrompt?: string,
  *   sanitizedPrompt?: string,
- *   issues?: ScanIssue[]
+ *   issues?: ScanIssue[],
+ *   eci?: EciResult
  * }} ReviewDialogPayload
  */
+
+// Maps ECI boolean flags to their display label. Only flags that are true
+// are shown - a wall of "false" badges would bury the ones that matter.
+const ECI_FLAGS = [
+  ["requiresEnterpriseKnowledge", "Requires Enterprise Knowledge"],
+  ["containsInternalArchitecture", "Internal Architecture"],
+  ["containsImplementationDetails", "Implementation Details"],
+  ["containsSourceCode", "Source Code"],
+  ["containsCustomerData", "Customer Data"],
+  ["containsSecrets", "Possible Secrets"]
+];
 
 /**
  * Creates the in-page review dialog shown after a prompt scan.
@@ -78,6 +105,59 @@ export function createReviewDialog(handlers) {
           )
           .join("")}
       </ul>
+    `;
+  }
+
+  /**
+   * Builds the AI (ECI) context-analysis markup, or "" when there's
+   * nothing to show. Renders a distinct "fallback" notice when the
+   * classifier couldn't run (Ollama unreachable / output failed
+   * validation) rather than presenting a fallback's default field values
+   * (all-false flags, 0% confidence) as if they were a real assessment.
+   *
+   * @param {EciResult | undefined} eci
+   * @returns {string}
+   */
+  function renderEci(eci) {
+    if (!eci) {
+      return "";
+    }
+
+    const isFallback =
+      eci.confidence === 0 &&
+      Array.isArray(eci.reasoning) &&
+      eci.reasoning.some((entry) => /fallback/i.test(String(entry)));
+
+    if (isFallback) {
+      return `<p class="empty-state">AI context analysis unavailable (${escapeHtml(
+        eci.reasoning?.[0] ?? "classifier fallback"
+      )}).</p>`;
+    }
+
+    const activeFlags = ECI_FLAGS.filter(([key]) => eci[key]).map(([, label]) => label);
+    const flagsMarkup = activeFlags.length
+      ? `<div class="eci-flags">${activeFlags
+          .map((label) => `<span class="eci-flag">${escapeHtml(label)}</span>`)
+          .join("")}</div>`
+      : `<p class="empty-state">No enterprise-context risk flags raised.</p>`;
+
+    const reasoningMarkup =
+      Array.isArray(eci.reasoning) && eci.reasoning.length
+        ? `<ul class="eci-reasoning">${eci.reasoning
+            .map((entry) => `<li>${escapeHtml(entry)}</li>`)
+            .join("")}</ul>`
+        : "";
+
+    const confidencePct = Math.round((eci.confidence ?? 0) * 100);
+
+    return `
+      <div class="eci-summary">
+        <span class="eci-pill">${escapeHtml(eci.intent || "Unknown intent")}</span>
+        <span class="eci-pill">${escapeHtml(eci.documentType || "None")}</span>
+        <span class="eci-confidence">AI confidence: ${confidencePct}%</span>
+      </div>
+      ${flagsMarkup}
+      ${reasoningMarkup}
     `;
   }
 
@@ -219,6 +299,47 @@ export function createReviewDialog(handlers) {
           margin: 0;
           color: #94a3b8;
         }
+        .eci-summary {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .eci-pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          background: rgba(167, 139, 250, 0.16);
+          color: #c4b5fd;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .eci-confidence {
+          font-size: 12px;
+          color: #94a3b8;
+        }
+        .eci-flags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+        .eci-flag {
+          padding: 6px 10px;
+          border-radius: 10px;
+          background: rgba(167, 139, 250, 0.1);
+          border: 1px solid rgba(167, 139, 250, 0.28);
+          color: #ddd6fe;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .eci-reasoning {
+          margin: 0;
+          padding-left: 18px;
+          color: #cbd5e1;
+          font-size: 13px;
+          line-height: 1.6;
+        }
         .actions {
           margin-top: 22px;
           display: flex;
@@ -258,6 +379,11 @@ export function createReviewDialog(handlers) {
           <div class="section">
             <p class="section-title">Detected Issues</p>
             <div id="pg-review-issues"></div>
+          </div>
+
+          <div class="section" id="pg-review-eci-section">
+            <p class="section-title">AI Context Analysis</p>
+            <div id="pg-review-eci"></div>
           </div>
 
           <div class="section">
@@ -320,6 +446,8 @@ export function createReviewDialog(handlers) {
     const summaryNode = shadow?.getElementById("pg-review-summary");
     const statusNode = shadow?.getElementById("pg-review-status");
     const issuesNode = shadow?.getElementById("pg-review-issues");
+    const eciSectionNode = shadow?.getElementById("pg-review-eci-section");
+    const eciNode = shadow?.getElementById("pg-review-eci");
     const originalNode = shadow?.getElementById("pg-review-original");
     const sanitizedNode = shadow?.getElementById("pg-review-sanitized");
     const sendSanitizedButton = shadow?.getElementById("pg-review-send-sanitized");
@@ -346,6 +474,14 @@ export function createReviewDialog(handlers) {
 
     if (issuesNode) {
       issuesNode.innerHTML = renderIssues(issues);
+    }
+
+    if (eciSectionNode) {
+      eciSectionNode.hidden = !payload.eci;
+    }
+
+    if (eciNode) {
+      eciNode.innerHTML = renderEci(payload.eci);
     }
 
     if (originalNode) {
