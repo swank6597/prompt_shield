@@ -56,3 +56,5 @@ class ScanResponse(BaseModel):
     reason: str | None = None
     issues: List[ScanIssue] = []
     eci: ECIResult | None = None
+    riskScore: int | None = None
+    matchedRules: List[str] = []

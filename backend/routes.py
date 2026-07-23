@@ -1,9 +1,9 @@
 # routes.py
 # API route definitions. Currently exposes the Presidio-only /analyze
-# endpoint (merged from the POC's api.py) plus /health. /api/scan now also
-# runs the ECI (ai/) layer on Presidio's masked text. Regex and the Policy
-# Engine still need to be wired in - once they are, this becomes the full
-# orchestration point: Regex -> Presidio -> ECI -> Policy Engine.
+# endpoint (merged from the POC's api.py) plus /health. /api/scan runs the
+# full pipeline: Presidio -> ECI (ai/) -> Policy Engine (policy/), which
+# turns their combined findings into the final ALLOW/WARN/MASK/BLOCK
+# decision. Only Regex (backend/regex/) still needs to be wired in.
 
 import os
 import sys
@@ -15,20 +15,37 @@ from models import AnalyzeRequest, AnalyzeResponse, ECIResult, EntityResult, Sca
 from presidio.presidio_engine import analyze_text
 from utils.logger import get_logger
 
-# backend/ai/'s modules use bare imports (e.g. `from keyword_search import
-# search`) that assume backend/ai is on sys.path, the same pattern
-# ollama_client.py already uses for backend/ itself. Mirrored here rather
-# than refactored so the ai/ modules keep working when run standalone
-# (`python backend/ai/semantic_classifier.py`, tests/test_eci_smoke.py).
+# backend/ai/'s and backend/policy/'s modules use bare imports (e.g.
+# `from keyword_search import search`, `from risk_engine import
+# compute_risk_score`) that assume their own directory is on sys.path -
+# the same pattern ollama_client.py already uses for backend/ itself.
+# Mirrored here rather than refactored so those modules keep working when
+# run standalone (`python backend/ai/semantic_classifier.py`,
+# `python backend/policy/policy_engine.py`, tests/test_eci_smoke.py).
 _AI_DIR = os.path.join(os.path.dirname(__file__), "ai")
-if _AI_DIR not in sys.path:
-    sys.path.insert(0, _AI_DIR)
+_POLICY_DIR = os.path.join(os.path.dirname(__file__), "policy")
+for _extra_dir in (_AI_DIR, _POLICY_DIR):
+    if _extra_dir not in sys.path:
+        sys.path.insert(0, _extra_dir)
 
 from semantic_classifier import classify as classify_context  # noqa: E402
+from policy_engine import decide as decide_policy  # noqa: E402
 
 log = get_logger("routes")
 
 router = APIRouter()
+
+# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK (its own internal
+# severity vocabulary, shared with rules.json). The extension only knows
+# SAFE/SANITIZE/BLOCK (see browser-extension/content/observer.js) - WARN
+# and MASK both surface as SANITIZE since neither should auto-send, but
+# both still let the user review and choose to send the sanitized prompt.
+DECISION_TO_STATUS = {
+    "ALLOW": "SAFE",
+    "WARN": "SANITIZE",
+    "MASK": "SANITIZE",
+    "BLOCK": "BLOCK",
+}
 
 
 @router.get("/health")
@@ -89,12 +106,26 @@ def scan_prompt(request: ScanRequest):
 
     eci_result = ECIResult(**eci_raw)
 
-    if result["entityCount"] == 0:
-        log.info("Scan result: SAFE")
-        return ScanResponse(status="SAFE", sanitizedPrompt=request.prompt, eci=eci_result)
+    # detection is the merged Regex+Presidio shape policy_engine.py expects.
+    # Regex isn't wired in yet, so this is Presidio-only for now - adding
+    # regex hits later just means extending entityTypes here.
+    detection = {
+        "entityCount": result["entityCount"],
+        "entityTypes": [entity["entity_type"] for entity in result["entities"]],
+    }
 
-    entity_types = ", ".join(sorted({entity["entity_type"] for entity in result["entities"]}))
-    reason = f"Detected {result['entityCount']} sensitive item(s): {entity_types}"
+    policy_start = time.perf_counter()
+    policy_result = decide_policy(detection, eci_raw)
+    policy_ms = (time.perf_counter() - policy_start) * 1000
+
+    log.info(
+        "Policy: decision=%s riskScore=%d matchedRules=%s (%.0fms)",
+        policy_result["decision"], policy_result["riskScore"],
+        policy_result["matchedRules"], policy_ms,
+    )
+
+    status = DECISION_TO_STATUS.get(policy_result["decision"], "SANITIZE")
+
     issues = [
         {
             "entityType": entity["entity_type"],
@@ -104,12 +135,14 @@ def scan_prompt(request: ScanRequest):
         for entity in result["entities"]
     ]
 
-    log.info("Scan result: SANITIZE (%s)", reason)
+    log.info("Scan result: %s (policy=%s)", status, policy_result["decision"])
 
     return ScanResponse(
-        status="SANITIZE",
+        status=status,
         sanitizedPrompt=result["maskedText"],
-        reason=reason,
+        reason=policy_result["explanation"],
         issues=issues,
         eci=eci_result,
+        riskScore=policy_result["riskScore"],
+        matchedRules=policy_result["matchedRules"],
     )
