@@ -195,12 +195,18 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, rev
 
     const applied = await applySanitizedPrompt(sanitizedPrompt);
     if (!applied) {
+      // status "BLOCK" here is just for the dialog's severity styling -
+      // this is a composer-write failure, not a policy BLOCK, so the
+      // user still needs a way to send something. allowOverride stays
+      // true so "Send Original" isn't hidden (see showReviewDialog below,
+      // where a real policy BLOCK passes allowOverride: false instead).
       reviewDialog.show({
         status: "BLOCK",
         reason: "Unable to apply the sanitized prompt in the chat composer.",
         originalPrompt: state.pendingOriginalPrompt ?? "",
         sanitizedPrompt,
-        issues: []
+        issues: [],
+        allowOverride: true
       });
       return false;
     }
@@ -245,7 +251,11 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, rev
       originalPrompt: payload.originalPrompt,
       sanitizedPrompt: payload.sanitizedPrompt,
       issues: payload.issues ?? [],
-      eci: payload.eci
+      eci: payload.eci,
+      // A real policy BLOCK is meant to actually stop the send - unlike
+      // WARN/MASK (both surfaced here as SANITIZE), which stay
+      // user-overridable. See modal.js's ReviewDialogPayload.
+      allowOverride: payload.status !== "BLOCK"
     });
   }
 
