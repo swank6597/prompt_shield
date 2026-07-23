@@ -1,3 +1,75 @@
 {
-  "_comment": "Declarative rule definitions consumed by policy_engine.py, e.g. IF containsInternalArchitecture == true AND destination == ChatGPT THEN BLOCK."
+  "_comment": "Declarative rules consumed by policy_engine.py. Rules are evaluated as OR conditions - ALL matching rules are collected, and the single highest-severity decision wins (severity order: BLOCK > MASK > WARN > ALLOW). This means rule order in this file does not matter.",
+
+  "rules": [
+    {
+      "id": "block_secret_credentials",
+      "description": "Blocked: a secret or credential (API key, token, private key) was detected.",
+      "condition": {
+        "entityTypes_any_of": [
+          "GITHUB_TOKEN", "OPENAI_API_KEY", "AWS_ACCESS_KEY",
+          "AWS_SECRET_KEY", "PRIVATE_KEY", "JWT_TOKEN"
+        ]
+      },
+      "decision": "BLOCK"
+    },
+    {
+      "id": "block_internal_architecture_or_code",
+      "description": "Blocked: this prompt reveals internal architecture or proprietary source code.",
+      "condition": {
+        "eci_field_true_any_of": ["containsInternalArchitecture", "containsSourceCode"],
+        "eci_min_confidence": 0.7
+      },
+      "decision": "BLOCK"
+    },
+    {
+      "id": "mask_personal_identifiers",
+      "description": "Personal identifiers detected - sending the masked version is recommended.",
+      "condition": {
+        "entityTypes_any_of": [
+          "PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "PAN_NUMBER",
+          "AADHAAR_NUMBER", "PASSPORT_NUMBER", "DRIVING_LICENSE", "GSTIN",
+          "BANK_ACCOUNT", "IFSC_CODE", "UPI_ID", "VEHICLE_NUMBER", "EMPLOYEE_ID"
+        ]
+      },
+      "decision": "MASK"
+    },
+    {
+      "id": "warn_requires_enterprise_knowledge",
+      "description": "This prompt appears to require enterprise-specific knowledge - review before sending.",
+      "condition": {
+        "eci_field_true_any_of": [
+          "requiresEnterpriseKnowledge", "containsImplementationDetails", "containsCustomerData"
+        ],
+        "eci_min_confidence": 0.5
+      },
+      "decision": "WARN"
+    },
+    {
+      "id": "warn_eci_could_not_classify",
+      "description": "Context could not be reliably classified - review before sending, out of caution.",
+      "condition": {
+        "eci_max_confidence": 0.0
+      },
+      "decision": "WARN"
+    },
+    {
+      "id": "warn_high_aggregate_risk",
+      "description": "Cumulative risk score is high even though no single rule triggered a block.",
+      "condition": {
+        "risk_score_min": 40
+      },
+      "decision": "WARN"
+    },
+    {
+      "id": "block_critical_aggregate_risk",
+      "description": "Cumulative risk score is critical.",
+      "condition": {
+        "risk_score_min": 80
+      },
+      "decision": "BLOCK"
+    }
+  ],
+
+  "default_decision": "ALLOW"
 }
