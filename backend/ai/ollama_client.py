@@ -1,3 +1,134 @@
 # ollama_client.py
-# Thin HTTP client for a locally running Ollama instance serving Phi-3 Mini.
-# Handles request formatting, timeouts, and basic retry logic.
+# Thin HTTP client for a locally running Ollama instance serving Phi-3
+# Mini. Handles request formatting, timeouts, and basic retry logic.
+# This module only sends/receives raw text - parsing and schema
+# validation of the response happens in semantic_classifier.py.
+
+import os
+import sys
+import time
+import requests
+
+# config.py lives one level up (backend/), while this file lives in
+# backend/ai/. Rather than requiring every caller to have backend/ on
+# sys.path, resolve it relative to this file's own location.
+_BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from config import OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT_SECONDS, OLLAMA_MAX_RETRIES
+
+MODEL_NAME = OLLAMA_MODEL
+TIMEOUT_SECONDS = OLLAMA_TIMEOUT_SECONDS
+MAX_RETRIES = OLLAMA_MAX_RETRIES
+
+
+class OllamaError(Exception):
+    """Raised when Ollama is unreachable or returns an unusable response."""
+    pass
+
+
+def call_ollama(
+    system_prompt: str,
+    user_prompt: str,
+    timeout: int = TIMEOUT_SECONDS,
+    max_retries: int = MAX_RETRIES,
+) -> str:
+    """
+    Sends a system/user prompt pair to Ollama's /api/chat endpoint and
+    returns the raw text response (expected to be a JSON string per
+    schema.json, but returned as-is here - validation is the caller's job).
+
+    Uses Ollama's "format": "json" option to constrain decoding to valid
+    JSON at the model level, in addition to the JSON instructions already
+    baked into system_prompt.md - two layers of defense against a small
+    model wrapping its answer in extra prose.
+    """
+    payload = {
+        "model": MODEL_NAME,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+        "format": "json",
+        "options": {
+            # Bounds worst-case generation time - our JSON output rarely
+            # needs more than ~200-250 tokens (10 fields + a short
+            # reasoning array). Capping this matters most on constrained
+            # hardware (low-power CPU, limited RAM), where an unusually
+            # long/rambling generation is what actually causes timeouts,
+            # not just raw model size.
+            "num_predict": 300,
+            # A classifier should give a consistent verdict on the same
+            # input. Ollama's default temperature (~0.7-0.8) was causing
+            # the same prompt to classify differently across runs.
+            "temperature": 0,
+            "top_p": 0.1,
+        },
+    }
+
+    last_error = None
+    attempts = max_retries + 1
+
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.post(
+                f"{OLLAMA_HOST}/api/chat", json=payload, timeout=timeout
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["message"]["content"]
+
+        except (requests.RequestException, KeyError, ValueError) as e:
+            last_error = e
+            if attempt < attempts:
+                time.sleep(attempt)  # simple linear backoff: 1s, 2s, ...
+                continue
+
+    raise OllamaError(
+        f"Ollama call failed after {attempts} attempt(s) "
+        f"(host={OLLAMA_HOST}, model={MODEL_NAME}): {last_error}"
+    )
+
+
+def warm_up() -> None:
+    """
+    Sends a trivial request to force Ollama to load the model into
+    memory upfront. Call this once before running multiple classify()
+    calls in a row (e.g. at the start of a test script) so the load-time
+    cost is paid once, not on every individual call.
+    """
+    try:
+        call_ollama("You are a test.", "Say OK.", timeout=TIMEOUT_SECONDS, max_retries=0)
+    except OllamaError:
+        pass  # caller's subsequent real calls will surface the real error
+
+
+def is_ollama_available() -> bool:
+    """Quick reachability check - useful for a graceful-degradation path
+    in semantic_classifier.py if Ollama is down (e.g. during a demo)."""
+    try:
+        requests.get(f"{OLLAMA_HOST}/api/tags", timeout=3).raise_for_status()
+        return True
+    except requests.RequestException:
+        return False
+
+
+if __name__ == "__main__":
+    # Quick manual check: python ollama_client.py
+    # Requires Ollama running locally with `ollama pull phi3:mini` done.
+    if not is_ollama_available():
+        print(f"Ollama not reachable at {OLLAMA_HOST} - start it with `ollama serve`.")
+    else:
+        from prompt_builder import build_prompt
+        from keyword_search import search
+
+        test_prompt = "Explain our OAuth2 implementation."
+        docs = search(test_prompt)
+        built = build_prompt(test_prompt, docs)
+
+        print("Calling Ollama...")
+        raw_response = call_ollama(built["system"], built["user"])
+        print("\n=== RAW RESPONSE ===")
+        print(raw_response)

@@ -1,3 +1,12 @@
-<!-- classifier_prompt.md -->
-<!-- Per-request prompt template - placeholders for the user's prompt and
-     retrieved enterprise knowledge snippets, ending with the classification instruction. -->
+## Retrieved Enterprise Knowledge
+
+{{RETRIEVED_KNOWLEDGE}}
+
+## Prompt to Classify
+
+{{MASKED_PROMPT}}
+
+## Instruction
+
+Classify the prompt above according to the system instructions.
+Respond with the JSON object only.
