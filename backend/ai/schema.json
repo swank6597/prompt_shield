@@ -13,6 +13,10 @@
     "containsSourceCode",
     "containsCustomerData",
     "containsSecrets",
+    "impactsGDPR",
+    "impactsPCIDSS",
+    "impactsHIPAA",
+    "impactsISO27001",
     "confidence",
     "reasoning"
   ],
@@ -69,6 +73,22 @@
       "type": "boolean",
       "description": "Defense-in-depth backstop only - true if the prompt appears to contain secrets/credentials that regex or Presidio may have missed. This is NOT the primary detection path for secrets; Regex and Presidio layers own that responsibility."
     },
+    "impactsGDPR": {
+      "type": "boolean",
+      "description": "True if the prompt involves processing personal/identifiable data of an EU-relevant individual (PII, health, financial, behavioral data), OR involves EULA/consent-clause/terms-of-service content governing how such personal data is collected, processed, or shared - EULAs are how GDPR-relevant consent and data-processing terms are actually expressed, so drafting, reviewing, or sharing them counts here too."
+    },
+    "impactsPCIDSS": {
+      "type": "boolean",
+      "description": "True if the prompt involves payment card data or the systems/processes handling it (card numbers, CVV, tokenization, payment processing flow details)."
+    },
+    "impactsHIPAA": {
+      "type": "boolean",
+      "description": "True if the prompt involves protected health information or US healthcare-covered-entity data (patient records, diagnoses, treatment, health insurance identifiers)."
+    },
+    "impactsISO27001": {
+      "type": "boolean",
+      "description": "True if the prompt falls within information-security-management scope (internal architecture, credentials/secrets, security controls, infrastructure configuration)."
+    },
     "confidence": {
       "type": "number",
       "minimum": 0,
@@ -77,7 +97,7 @@
     },
     "reasoning": {
       "type": "array",
-      "description": "Short, plain-language justifications for the classification above. Used by the Policy Engine to build a human-readable explanation, and for debugging/sanity-checking the model's output.",
+      "description": "Short, plain-language justifications for the classification above. If any impactsGDPR/impactsPCIDSS/impactsHIPAA/impactsISO27001 flag is true, include at least one bullet naming which framework (and EULA/consent term, if that's what triggered impactsGDPR) and why. Used by the Policy Engine to build a human-readable explanation, and for debugging/sanity-checking the model's output.",
       "items": {
         "type": "string"
       },

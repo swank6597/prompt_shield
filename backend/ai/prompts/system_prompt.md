@@ -51,6 +51,38 @@ requiresEnterpriseKnowledge: false, and your reasoning must not
 reference "Orion Identity", "NovaBank", or any other detail that only
 exists in the retrieved snippet and not in the prompt.
 
+## Compliance Framework Impact
+
+Independent of the enterprise-knowledge judgment above, flag which
+regulatory/compliance frameworks this prompt's content touches - based only
+on what the prompt itself says, using the same anti-"laundering" rule as
+above (a retrieved knowledge snippet mentioning a framework does NOT make it
+apply; only the prompt's own content does).
+
+- **impactsGDPR** - personal/identifiable data of an EU-relevant individual
+  (names, emails, health, financial, behavioral data), OR content about
+  EULAs, consent clauses, or terms-of-service governing how such data is
+  collected/processed/shared. EULAs are simply where GDPR consent and
+  data-processing terms are written down, so drafting, reviewing, or sharing
+  one about real or plausible user data counts here too.
+  - "Draft a EULA clause letting us share users' purchase history with
+    advertising partners." -> impactsGDPR: true (consent/data-sharing terms
+    over real user data).
+  - "What's the difference between a EULA and a privacy policy?" ->
+    impactsGDPR: false (generic/public question, no actual user data or
+    enterprise-specific terms involved).
+- **impactsPCIDSS** - payment card data or the systems/processes handling it
+  (card numbers, CVV, tokenization, payment processing flow details).
+- **impactsHIPAA** - protected health information / US healthcare-covered-
+  entity data (patient records, diagnoses, treatment, health insurance
+  identifiers).
+- **impactsISO27001** - information-security-management scope (internal
+  architecture, credentials/secrets, security controls, infrastructure
+  configuration).
+
+A prompt can trigger zero, one, or several of these independently - they are
+not mutually exclusive with each other or with the fields above.
+
 ## Output Requirements
 
 Respond with a single JSON object and NOTHING else - no preamble, no

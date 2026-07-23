@@ -1,9 +1,18 @@
 # routes.py
 # API route definitions. Currently exposes the Presidio-only /analyze
 # endpoint (merged from the POC's api.py) plus /health. /api/scan runs the
-# full pipeline: Presidio -> ECI (ai/) -> Policy Engine (policy/), which
-# turns their combined findings into the final ALLOW/WARN/MASK/BLOCK
-# decision. Only Regex (backend/regex/) still needs to be wired in.
+# full pipeline: Presidio -> Smart Analysis Router -> ECI (ai/) -> Policy
+# Engine (policy/), which turns their combined findings into the final
+# ALLOW/WARN/MASK/BLOCK decision. Only Regex (backend/regex/) still needs
+# to be wired in.
+#
+# The "Smart Analysis Router" and "Orchestrator Agent" from the original
+# hackathon plan collapse into one deterministic gate here rather than
+# separate modules: Presidio always runs (cheap, local), and
+# is_trivial_prompt() decides whether the one expensive step - the ECI
+# Ollama call - is worth making at all. This is intentionally NOT agentic:
+# an LLM call to decide whether to make an LLM call would add 30-180s of
+# latency for zero benefit on this hardware.
 
 import os
 import sys
@@ -13,6 +22,7 @@ from fastapi import APIRouter
 
 from models import AnalyzeRequest, AnalyzeResponse, ECIResult, EntityResult, ScanRequest, ScanResponse
 from presidio.presidio_engine import analyze_text
+from utils.helpers import is_trivial_prompt
 from utils.logger import get_logger
 
 # backend/ai/'s and backend/policy/'s modules use bare imports (e.g.
@@ -28,7 +38,7 @@ for _extra_dir in (_AI_DIR, _POLICY_DIR):
     if _extra_dir not in sys.path:
         sys.path.insert(0, _extra_dir)
 
-from semantic_classifier import classify as classify_context  # noqa: E402
+from semantic_classifier import classify as classify_context, skipped_result  # noqa: E402
 from policy_engine import decide as decide_policy  # noqa: E402
 
 log = get_logger("routes")
@@ -86,23 +96,31 @@ def scan_prompt(request: ScanRequest):
             result["entityCount"], entity_types, presidio_ms,
         )
 
-    # ECI runs on the already-masked text (never the raw prompt), and on
-    # every request - not just when Presidio finds entities - since it
-    # catches enterprise-context risk (e.g. "explain our OAuth2
-    # implementation") that contains no PII at all. classify() never
-    # raises; on any failure it returns a fail-closed fallback dict.
-    eci_start = time.perf_counter()
-    eci_raw = classify_context(result["maskedText"])
-    eci_ms = (time.perf_counter() - eci_start) * 1000
-
-    if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
-        log.warning("ECI: fallback triggered (%.0fms) - %s", eci_ms, eci_raw["reasoning"])
+    # Smart Analysis Router: skip the expensive ECI/Ollama call for
+    # trivial prompts ("hi", "") - but only when Presidio also found
+    # nothing, so anything Presidio flags still gets the full ECI pass
+    # regardless of length. ECI otherwise runs on the already-masked text
+    # (never the raw prompt), since it catches enterprise-context risk
+    # (e.g. "explain our OAuth2 implementation") that contains no PII at
+    # all. classify() never raises; on any failure it returns a
+    # fail-closed fallback dict.
+    if result["entityCount"] == 0 and is_trivial_prompt(request.prompt):
+        log.info("ECI: skipped (trivial prompt, no entities) (0ms)")
+        eci_raw = skipped_result("trivial prompt, no entities detected")
+        eci_ms = 0.0
     else:
-        log.info(
-            "ECI: intent=%s requiresEnterpriseKnowledge=%s confidence=%.2f (%.0fms)",
-            eci_raw.get("intent"), eci_raw.get("requiresEnterpriseKnowledge"),
-            eci_raw.get("confidence", 0.0), eci_ms,
-        )
+        eci_start = time.perf_counter()
+        eci_raw = classify_context(result["maskedText"])
+        eci_ms = (time.perf_counter() - eci_start) * 1000
+
+        if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
+            log.warning("ECI: fallback triggered (%.0fms) - %s", eci_ms, eci_raw["reasoning"])
+        else:
+            log.info(
+                "ECI: intent=%s requiresEnterpriseKnowledge=%s confidence=%.2f (%.0fms)",
+                eci_raw.get("intent"), eci_raw.get("requiresEnterpriseKnowledge"),
+                eci_raw.get("confidence", 0.0), eci_ms,
+            )
 
     eci_result = ECIResult(**eci_raw)
 

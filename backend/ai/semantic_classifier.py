@@ -51,6 +51,21 @@ def _fallback_result(reason: str) -> dict:
     trusted. requiresEnterpriseKnowledge=True + confidence=0.0 signals
     "could not classify - treat with caution" to the Policy Engine,
     rather than defaulting to a false "this looks fine".
+
+    Known limitation (confirmed via live smoke test after the 4 impactsX
+    compliance fields were added, growing the schema from 10 to 14
+    required fields): phi3:mini's structured-output reliability degrades
+    somewhat at this schema size - it occasionally emits a malformed
+    field (a corrupted key name, or omits one required field) and this
+    path gets hit more often than before as a result. Confirmed this is
+    NOT a token-budget/truncation issue (a live A/B at num_predict 300 vs.
+    450 produced byte-identical completions - see ollama_client.py) but a
+    genuine, reproducible small-model generation limitation on a schema
+    this size. This is a real accuracy/latency trade-off worth revisiting
+    (e.g. a larger/instruction-tuned model, or splitting compliance
+    mapping into its own lighter schema) but is not unsafe: every failure
+    here still correctly resolves to this fail-closed WARN path rather
+    than silently passing bad data through.
     """
     return {
         "intent": "Other",
@@ -61,8 +76,44 @@ def _fallback_result(reason: str) -> dict:
         "containsSourceCode": False,
         "containsCustomerData": False,
         "containsSecrets": False,
+        "impactsGDPR": False,
+        "impactsPCIDSS": False,
+        "impactsHIPAA": False,
+        "impactsISO27001": False,
         "confidence": 0.0,
         "reasoning": [f"ECI fallback triggered: {reason}"],
+    }
+
+
+def skipped_result(reason: str) -> dict:
+    """
+    Router-skip default: confidently benign, NOT fail-closed. Used by
+    routes.py when the Smart Analysis Router decided a prompt is trivial
+    (and Presidio found nothing) and chose not to call Ollama at all.
+
+    Deliberately the OPPOSITE posture from _fallback_result(): that one
+    is confidence=0.0 to signal "we tried and couldn't classify, be
+    cautious" (which rules.json's warn_eci_could_not_classify rule turns
+    into WARN). Reusing it here would mean every skipped trivial prompt
+    incorrectly comes back WARN instead of ALLOW. confidence=1.0 + all
+    flags False keeps the decision on ALLOW, matching what would happen
+    if Ollama had actually run and found nothing.
+    """
+    return {
+        "intent": "Other",
+        "documentType": "None",
+        "requiresEnterpriseKnowledge": False,
+        "containsInternalArchitecture": False,
+        "containsImplementationDetails": False,
+        "containsSourceCode": False,
+        "containsCustomerData": False,
+        "containsSecrets": False,
+        "impactsGDPR": False,
+        "impactsPCIDSS": False,
+        "impactsHIPAA": False,
+        "impactsISO27001": False,
+        "confidence": 1.0,
+        "reasoning": [f"Skipped by Smart Analysis Router: {reason}"],
     }
 
 
