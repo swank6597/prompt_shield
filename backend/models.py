@@ -25,3 +25,36 @@ class AnalyzeResponse(BaseModel):
     entityCount: int
     maskedText: str
     entities: List[EntityResult]
+
+
+class ScanRequest(BaseModel):
+    prompt: str
+
+
+class ScanIssue(BaseModel):
+    entityType: str
+    value: str
+    score: float
+
+
+class ECIResult(BaseModel):
+    intent: str
+    documentType: str
+    requiresEnterpriseKnowledge: bool
+    containsInternalArchitecture: bool
+    containsImplementationDetails: bool
+    containsSourceCode: bool
+    containsCustomerData: bool
+    containsSecrets: bool
+    confidence: float
+    reasoning: List[str]
+
+
+class ScanResponse(BaseModel):
+    status: str
+    sanitizedPrompt: str | None = None
+    reason: str | None = None
+    issues: List[ScanIssue] = []
+    eci: ECIResult | None = None
+    riskScore: int | None = None
+    matchedRules: List[str] = []

@@ -17,9 +17,9 @@ Once each piece works independently, we'll pull the working parts into the actua
 
 | Folder | Purpose | Status |
 |---|---|---|
-| `presidio/` | PII detection & masking (Microsoft Presidio) | In progress |
+| `backend/` | Prompt scanning API (Presidio + `/api/scan`) | In progress |
+| `browser-extension/` | Manifest V3 extension for intercepting prompts | In progress |
 | `ollama/` | Local AI risk classification (Ollama + Phi-4-mini) | In progress |
-| `chrome-extension/` | Manifest V3 extension for intercepting prompts | Not started |
 
 ## Setup notes
 
@@ -36,6 +36,46 @@ Each folder should have its own short notes on:
 
 Findings and blockers can go in `docs/`.
 
+## Quick Start
+
+Run the backend scanner and load the Chrome extension.
+
+### 1. Start the backend API
+
+From the repo root:
+
+**Windows (PowerShell):**
+```powershell
+cd backend
+pip install -r requirements.txt
+python -m spacy download en_core_web_lg
+uvicorn app:app --reload --port 8081
+```
+
+**macOS / Linux (bash):**
+```bash
+cd backend
+pip install -r requirements.txt
+python -m spacy download en_core_web_lg
+uvicorn app:app --reload --port 8081
+```
+
+Notes:
+- Use port `8081` by default. Port `8080` is often already used on Windows by NVIDIA Broadcast.
+- Verify the API is running: `http://localhost:8081/health`
+
+### 2. Load the Chrome extension
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select the `browser-extension` folder
+5. Reload the extension after code changes
+
+### 3. Test on a supported AI chat site
+
+Open ChatGPT, Gemini, Claude, DeepSeek, or Microsoft Copilot, then send a prompt containing test data such as an email address or phone number. Prompt Guardian should intercept the send and open the review popup.
+
 ## Current Focus
 
 The active implementation work is in `browser-extension/`. It contains the Manifest V3 extension that:
@@ -43,8 +83,8 @@ The active implementation work is in `browser-extension/`. It contains the Manif
 - Detects supported AI chat pages
 - Reads prompt text before send
 - Scans prompts through the local API
-- Allows `SAFE` prompts
-- Blocks `BLOCK` prompts with a warning dialog and bypass flow
+- Shows a review popup with detected issues before sending
+- Lets the user send the sanitized prompt, send the original anyway, or cancel
 
 ## Branch Layout
 
@@ -54,19 +94,18 @@ The active implementation work is in `browser-extension/`. It contains the Manif
 
 ## Repository Layout
 
+- [`backend/`](backend/) - FastAPI scanner service, Presidio integration, and backend README
 - [`browser-extension/`](browser-extension/) - Chrome extension source, manifest, icons, and extension README
-- `backend/` - planned scanner and policy service implementation
 - `knowledge/` - shared research and project knowledge base
 - `samples/` - prompt samples and expected outputs
 - `tests/` - automated tests
 - `docs/` - architecture and project documentation
 - `scripts/` - utility scripts
 
-## Extension Docs
+## Docs
 
-See the extension-specific README here:
-
-- [`browser-extension/README.md`](browser-extension/README.md)
+- Backend API: [`backend/README.md`](backend/README.md)
+- Browser extension: [`browser-extension/README.md`](browser-extension/README.md)
 
 ## Development Status
 
@@ -77,4 +116,5 @@ See the extension-specific README here:
 ## Notes
 
 - The extension currently falls back to `SAFE` if the local scan API is unavailable, which keeps typing unblocked during development.
+- The scan API runs on `http://localhost:8081` by default.
 - Supported AI sites currently include ChatGPT, Gemini, Claude, DeepSeek, and Microsoft Copilot.
