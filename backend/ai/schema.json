@@ -1,3 +1,88 @@
 {
-  "_comment": "JSON Schema defining the required structure of the ECI classifier's output (intent, documentType, requiresEnterpriseKnowledge, containsInternalArchitecture, containsImplementationDetails, containsSourceCode, containsCustomerData, containsSecrets, confidence, reasoning)."
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ECIClassificationResult",
+  "description": "Structured output the ECI (Enterprise Context Intelligence) classifier must return for a given prompt. This describes context only - it is NOT a decision. The Policy Engine, not this schema, decides Allow/Warn/Mask/Block.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "intent",
+    "documentType",
+    "requiresEnterpriseKnowledge",
+    "containsInternalArchitecture",
+    "containsImplementationDetails",
+    "containsSourceCode",
+    "containsCustomerData",
+    "containsSecrets",
+    "confidence",
+    "reasoning"
+  ],
+  "properties": {
+    "intent": {
+      "type": "string",
+      "description": "What the user is trying to do with this prompt.",
+      "enum": [
+        "Code Generation",
+        "Debugging",
+        "Documentation",
+        "SQL Query",
+        "Architecture Discussion",
+        "Business Analysis",
+        "General Knowledge Question",
+        "Other"
+      ]
+    },
+    "documentType": {
+      "type": "string",
+      "description": "The kind of enterprise content this prompt most resembles, if any.",
+      "enum": [
+        "Architecture",
+        "Source Code",
+        "SQL/Database",
+        "Business Process",
+        "Security/Credentials",
+        "Customer Data",
+        "General/Public",
+        "None"
+      ]
+    },
+    "requiresEnterpriseKnowledge": {
+      "type": "boolean",
+      "description": "True if answering this prompt correctly requires knowledge specific to the enterprise (its products, systems, or internal processes) rather than general public knowledge."
+    },
+    "containsInternalArchitecture": {
+      "type": "boolean",
+      "description": "True if the prompt describes or references internal system architecture, service names, infrastructure layout, or design decisions specific to the enterprise."
+    },
+    "containsImplementationDetails": {
+      "type": "boolean",
+      "description": "True if the prompt reveals how something is actually implemented internally (algorithms, business logic, configuration specifics) beyond a generic/public explanation."
+    },
+    "containsSourceCode": {
+      "type": "boolean",
+      "description": "True if the prompt includes or asks about actual proprietary source code, not generic/public code samples."
+    },
+    "containsCustomerData": {
+      "type": "boolean",
+      "description": "True if the prompt references real or plausible customer-specific data (accounts, transactions, identifiers) rather than generic/hypothetical examples."
+    },
+    "containsSecrets": {
+      "type": "boolean",
+      "description": "Defense-in-depth backstop only - true if the prompt appears to contain secrets/credentials that regex or Presidio may have missed. This is NOT the primary detection path for secrets; Regex and Presidio layers own that responsibility."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Model's self-reported confidence in this classification. Self-reported confidence from a small local model is not fully reliable on its own - treat as one signal among several, not a sole gate."
+    },
+    "reasoning": {
+      "type": "array",
+      "description": "Short, plain-language justifications for the classification above. Used by the Policy Engine to build a human-readable explanation, and for debugging/sanity-checking the model's output.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 5
+    }
+  }
 }
