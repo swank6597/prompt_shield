@@ -49,7 +49,7 @@
         "https://chat.deepseek.ai/*",
         "https://copilot.microsoft.com/*",
         "https://copilot.cloud.microsoft/*",
-        "https://www.bing.com/chat*"
+        "https://www.bing.com/*"
       ]
     }
   ],
