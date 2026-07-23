@@ -32,7 +32,8 @@ import { resolveScanIssues } from "../utils/scan-utils.js";
  *   originalPrompt?: string,
  *   sanitizedPrompt?: string,
  *   issues?: ScanIssue[],
- *   eci?: EciResult
+ *   eci?: EciResult,
+ *   allowOverride?: boolean
  * }} ReviewDialogPayload
  */
 
@@ -500,7 +501,13 @@ export function createReviewDialog(handlers) {
     }
 
     if (sendOriginalButton) {
-      sendOriginalButton.textContent = status === "BLOCK" ? "Send Anyway" : "Send Original";
+      // Callers pass allowOverride explicitly for the real policy decision
+      // path (false only for an actual BLOCK) - defaulting to
+      // status !== "BLOCK" here only covers callers that don't pass it.
+      const overrideAllowed = payload.allowOverride ?? status !== "BLOCK";
+      sendOriginalButton.hidden = !overrideAllowed;
+      sendOriginalButton.disabled = !overrideAllowed;
+      sendOriginalButton.textContent = "Send Original";
     }
 
     if (host) {
