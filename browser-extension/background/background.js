@@ -11,7 +11,7 @@ const DEFAULT_SCAN_ENDPOINT = "http://localhost:8081/api/scan";
  */
 function normalizeScanResponse(response) {
   if (response && typeof response === "object") {
-    const typedResponse = /** @type {{ status?: unknown, reason?: unknown, sanitizedPrompt?: unknown, issues?: unknown }} */ (
+    const typedResponse = /** @type {{ status?: unknown, reason?: unknown, sanitizedPrompt?: unknown, issues?: unknown, eci?: unknown }} */ (
       response
     );
     const status = String(typedResponse.status ?? "SAFE").toUpperCase();
@@ -19,7 +19,8 @@ function normalizeScanResponse(response) {
     const sanitizedPrompt =
       typeof typedResponse.sanitizedPrompt === "string" ? typedResponse.sanitizedPrompt : undefined;
     const issues = normalizeIssueList(typedResponse.issues);
-    return { status, reason, sanitizedPrompt, issues, raw: response };
+    const eci = typedResponse.eci && typeof typedResponse.eci === "object" ? typedResponse.eci : undefined;
+    return { status, reason, sanitizedPrompt, issues, eci, raw: response };
   }
 
   return { status: "SAFE", issues: [], raw: response };

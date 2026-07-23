@@ -23,7 +23,7 @@ const PROMPT_OBSERVER_CONFIG = {
  * @param {{
  *   Logger: { info: (message: string) => void, warn: (message: string) => void, error: (message: string) => void },
  *   detector: ReturnType<typeof import("./detector.js").createPromptGuardianDetector>,
- *   scanClient: { scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, raw?: unknown }> },
+ *   scanClient: { scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, eci?: import("./modal.js").EciResult, raw?: unknown }> },
  *   reviewDialog: { show: (payload: import("./modal.js").ReviewDialogPayload) => void, hide: () => void },
  *   documentRef: Document,
  *   windowRef: Window
@@ -230,7 +230,8 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, rev
    *   reason?: string,
    *   originalPrompt: string,
    *   sanitizedPrompt: string,
-   *   issues?: Array<{ entityType: string, value: string, score?: number }>
+   *   issues?: Array<{ entityType: string, value: string, score?: number }>,
+   *   eci?: import("./modal.js").EciResult
    * }} payload
    */
   function showReviewDialog(payload) {
@@ -243,7 +244,8 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, rev
       reason: payload.reason,
       originalPrompt: payload.originalPrompt,
       sanitizedPrompt: payload.sanitizedPrompt,
-      issues: payload.issues ?? []
+      issues: payload.issues ?? [],
+      eci: payload.eci
     });
   }
 
@@ -449,7 +451,8 @@ export function createPromptGuardianObserver({ Logger, detector, scanClient, rev
             reason: result.reason,
             originalPrompt: promptText,
             sanitizedPrompt
-          })
+          }),
+          eci: result.eci
         });
         return;
       }
