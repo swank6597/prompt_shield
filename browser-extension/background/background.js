@@ -1,6 +1,7 @@
 ﻿import { Logger } from "../utils/logger.js";
+import { normalizeIssueList } from "../utils/scan-utils.js";
 
-const DEFAULT_SCAN_ENDPOINT = "http://localhost:8080/api/scan";
+const DEFAULT_SCAN_ENDPOINT = "http://localhost:8081/api/scan";
 
 /**
  * Normalizes a scan response into the shape used by Milestone 5.
@@ -10,13 +11,18 @@ const DEFAULT_SCAN_ENDPOINT = "http://localhost:8080/api/scan";
  */
 function normalizeScanResponse(response) {
   if (response && typeof response === "object") {
-    const typedResponse = /** @type {{ status?: unknown, reason?: unknown }} */ (response);
+    const typedResponse = /** @type {{ status?: unknown, reason?: unknown, sanitizedPrompt?: unknown, issues?: unknown }} */ (
+      response
+    );
     const status = String(typedResponse.status ?? "SAFE").toUpperCase();
     const reason = typeof typedResponse.reason === "string" ? typedResponse.reason : undefined;
-    return { status, reason, raw: response };
+    const sanitizedPrompt =
+      typeof typedResponse.sanitizedPrompt === "string" ? typedResponse.sanitizedPrompt : undefined;
+    const issues = normalizeIssueList(typedResponse.issues);
+    return { status, reason, sanitizedPrompt, issues, raw: response };
   }
 
-  return { status: "SAFE", raw: response };
+  return { status: "SAFE", issues: [], raw: response };
 }
 
 /**
@@ -24,7 +30,7 @@ function normalizeScanResponse(response) {
  *
  * @param {string} prompt
  * @param {string} [endpoint]
- * @returns {Promise<{ status: string, reason?: string, raw?: unknown }>}
+ * @returns {Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, raw?: unknown }>}
  */
 async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT) {
   try {
@@ -53,6 +59,7 @@ async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT) {
     return {
       status: "SAFE",
       reason: "API unavailable, allowing prompt to continue",
+      issues: [],
       raw: { error: message }
     };
   }
