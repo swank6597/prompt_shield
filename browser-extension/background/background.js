@@ -33,7 +33,7 @@ function normalizeScanResponse(response) {
  * @param {string} [endpoint]
  * @returns {Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, raw?: unknown }>}
  */
-async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT) {
+async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT, username, platform) {
   try {
     Logger.info("API Request Sent");
 
@@ -42,7 +42,7 @@ async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT) {
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, username, platform })
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -73,7 +73,12 @@ if (chrome?.runtime?.onMessage?.addListener) {
     }
 
     void (async () => {
-      const result = await scanPrompt(String(message.prompt ?? ""), String(message.endpoint ?? DEFAULT_SCAN_ENDPOINT));
+      const result = await scanPrompt(
+        String(message.prompt ?? ""),
+        String(message.endpoint ?? DEFAULT_SCAN_ENDPOINT),
+        typeof message.username === "string" ? message.username : undefined,
+        typeof message.platform === "string" ? message.platform : undefined
+      );
       sendResponse(result);
     })();
 

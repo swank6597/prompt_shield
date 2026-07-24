@@ -20,6 +20,7 @@ import time
 
 from fastapi import APIRouter
 
+from audit.audit_logger import log_scan
 from models import AnalyzeRequest, AnalyzeResponse, ECIResult, EntityResult, ScanRequest, ScanResponse
 from presidio.presidio_engine import analyze_text
 from utils.helpers import is_trivial_prompt
@@ -81,6 +82,7 @@ def analyze(request: AnalyzeRequest):
 
 @router.post("/api/scan", response_model=ScanResponse)
 def scan_prompt(request: ScanRequest):
+    request_start = time.perf_counter()
     log.info("Scan request received (prompt_len=%d)", len(request.prompt))
 
     presidio_start = time.perf_counter()
@@ -154,6 +156,28 @@ def scan_prompt(request: ScanRequest):
     ]
 
     log.info("Scan result: %s (policy=%s)", status, policy_result["decision"])
+
+    # Audit trail: masked_prompt only (never request.prompt), entity_types
+    # only (never entities[].value, the raw matched value used in the
+    # `issues` list two lines below). log_scan() never raises - a DB
+    # failure logs a warning and is swallowed, never affecting this response.
+    total_ms = (time.perf_counter() - request_start) * 1000
+    log_scan(
+        username=request.username,
+        platform=request.platform,
+        masked_prompt=result["maskedText"],
+        entity_count=result["entityCount"],
+        entity_types=sorted(set(detection["entityTypes"])),
+        eci=eci_raw,
+        risk_score=policy_result["riskScore"],
+        matched_rules=policy_result["matchedRules"],
+        decision=policy_result["decision"],
+        status=status,
+        presidio_ms=presidio_ms,
+        eci_ms=eci_ms,
+        policy_ms=policy_ms,
+        total_ms=total_ms,
+    )
 
     return ScanResponse(
         status=status,

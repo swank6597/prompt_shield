@@ -23,3 +23,12 @@ OLLAMA_MAX_RETRIES = int(os.environ.get("PROMPTSHIELD_OLLAMA_MAX_RETRIES", "1"))
 
 # --- Presidio settings ---
 PRESIDIO_MIN_SCORE = float(os.environ.get("PROMPTSHIELD_PRESIDIO_MIN_SCORE", "0.85"))
+
+# --- Audit log settings ---
+# SQLite file backing the audit trail (backend/audit/audit_logger.py).
+# Colocated with the module by default; override for a shared location
+# (e.g. a mounted volume) without a code change.
+AUDIT_DB_PATH = os.environ.get(
+    "PROMPTSHIELD_AUDIT_DB_PATH",
+    os.path.join(os.path.dirname(__file__), "audit", "audit_log.db"),
+)

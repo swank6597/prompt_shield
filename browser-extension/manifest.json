@@ -3,7 +3,7 @@
   "name": "Prompt Guardian",
   "description": "Observe supported AI chat prompts before sending them.",
   "version": "3.0.0",
-  "permissions": [],
+  "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",

@@ -18,3 +18,9 @@ Thumbs.db
 # Env/secrets
 .env
 *.key
+
+# Audit log (runtime data, not source - see backend/audit/README.md)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

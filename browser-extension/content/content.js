@@ -5,14 +5,16 @@
     detectorModule,
     apiClientModule,
     modalModule,
-    observerModule
+    observerModule,
+    identityModule
   ] = await Promise.all([
     import(chrome.runtime.getURL("utils/logger.js")),
     import(chrome.runtime.getURL("content/site-definitions.js")),
     import(chrome.runtime.getURL("content/detector.js")),
     import(chrome.runtime.getURL("content/api-client.js")),
     import(chrome.runtime.getURL("content/modal.js")),
-    import(chrome.runtime.getURL("content/observer.js"))
+    import(chrome.runtime.getURL("content/observer.js")),
+    import(chrome.runtime.getURL("content/identity.js"))
   ]);
 
   const { Logger } = loggerModule;
@@ -21,6 +23,7 @@
   const { createPromptScanClient } = apiClientModule;
   const { createReviewDialog } = modalModule;
   const { createPromptGuardianObserver } = observerModule;
+  const { resolveIdentity } = identityModule;
 
   Logger.info("Extension Loaded");
 
@@ -32,10 +35,16 @@
 
   Logger.info(`${site.label} Detected`);
 
+  // Resolved once at load: DOM auto-detection first, manual popup-
+  // configured fallback second - see content/identity.js.
+  const username = await resolveIdentity(document, site);
+
   const detector = createPromptGuardianDetector(site);
   const scanClient = createPromptScanClient({
     Logger,
-    endpoint: site.apiEndpoint
+    endpoint: site.apiEndpoint,
+    username,
+    platform: site.label
   });
 
   let observer = null;

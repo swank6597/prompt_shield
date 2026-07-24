@@ -10,7 +10,7 @@ const IGNORED_TEXT = /\u200B/g;
  * @param {unknown} value
  * @returns {value is HTMLElement}
  */
-function isHTMLElement(value) {
+export function isHTMLElement(value) {
   return typeof HTMLElement !== "undefined" && value instanceof HTMLElement;
 }
 
@@ -20,7 +20,7 @@ function isHTMLElement(value) {
  * @param {Element} element
  * @returns {boolean}
  */
-function isVisibleElement(element) {
+export function isVisibleElement(element) {
   if (!isHTMLElement(element)) {
     return false;
   }
@@ -44,7 +44,7 @@ function isVisibleElement(element) {
  * @param {string} selector
  * @returns {Element[]}
  */
-function querySelectorAllDeep(root, selector) {
+export function querySelectorAllDeep(root, selector) {
   const results = [];
   const queue = [root];
   const visited = new Set();
@@ -75,7 +75,7 @@ function querySelectorAllDeep(root, selector) {
  * @param {string[]} selectors
  * @returns {HTMLElement[]}
  */
-function collectCandidates(root, selectors) {
+export function collectCandidates(root, selectors) {
   const collected = new Set();
 
   for (const selector of selectors) {
