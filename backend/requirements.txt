@@ -17,3 +17,10 @@ google-genai            # Google Gemini (new SDK, replaces deprecated google-gen
 
 # --- Config management ---
 python-dotenv           # Load secrets from .env file (never committed)
+
+# --- Lexical + Semantic Retrieval Engine ---
+sentence-transformers==3.4.1    # Local embedding model (all-MiniLM-L6-v2)
+faiss-cpu==1.14.3               # FAISS vector similarity search (CPU-only)
+
+# --- Testing (dev/test only) ---
+hypothesis==6.119.2             # Property-based testing framework

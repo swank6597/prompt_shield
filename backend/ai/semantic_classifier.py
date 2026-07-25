@@ -121,7 +121,7 @@ def _parse_and_validate(raw_text: str) -> dict:
     return parsed
 
 
-def classify(masked_text: str, entity_count: int = 0) -> dict:
+def classify(masked_text: str, entity_count: int = 0, semantic_chunks: list[dict] | None = None) -> dict:
     """
     Runs the full ECI pipeline on already-masked text (output of the
     Regex + Presidio layers) and returns a dict matching schema.json.
@@ -130,6 +130,10 @@ def classify(masked_text: str, entity_count: int = 0) -> dict:
         masked_text: The prompt after Presidio masking.
         entity_count: Number of entities Presidio detected (passed to the
                       router for auto-strategy complexity scoring).
+        semantic_chunks: Optional list of semantic chunks from the
+                        pre-classifier's SemanticEngine search. When
+                        provided, these are passed to build_prompt() for
+                        targeted context instead of full documents only.
 
     Never raises - any failure path returns _fallback_result(...) so
     routes.py / policy_engine.py don't need their own try/except around
@@ -145,7 +149,7 @@ def classify(masked_text: str, entity_count: int = 0) -> dict:
             "Retrieved %d knowledge doc(s): %s",
             len(retrieved_docs), [d["filename"] for d in retrieved_docs],
         )
-    built = build_prompt(masked_text, retrieved_docs)
+    built = build_prompt(masked_text, retrieved_docs, semantic_chunks=semantic_chunks)
 
     # Context passed to the router for smart auto-routing decisions
     router_context = {
