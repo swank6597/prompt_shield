@@ -77,10 +77,39 @@ def _format_retrieved_knowledge(retrieved_docs: list[dict]) -> str:
     return "\n\n".join(sections)
 
 
-def build_prompt(masked_text: str, retrieved_docs: list[dict] | None = None) -> dict:
+def _format_semantic_chunks(semantic_chunks: list[dict]) -> str:
+    """
+    Format semantic chunks as targeted context sections for the LLM prompt.
+
+    Each chunk is a dict with keys: text, source_doc, score.
+    Formats them as concise, clearly delimited sections (~500 chars each).
+    """
+    if not semantic_chunks:
+        return NO_KNOWLEDGE_MESSAGE
+
+    sections = []
+    for chunk in semantic_chunks:
+        source = chunk.get("source_doc", "unknown")
+        score = chunk.get("score", 0.0)
+        text = chunk.get("text", "")
+        sections.append(
+            f"### Semantic Match: {source} (relevance: {score:.2f})\n\n{text}"
+        )
+    return "\n\n".join(sections)
+
+
+def build_prompt(
+    masked_text: str,
+    retrieved_docs: list[dict] | None = None,
+    semantic_chunks: list[dict] | None = None,
+) -> dict:
     """
     Returns {"system": "<system prompt>", "user": "<user/classifier prompt>"}
     ready to hand to ollama_client.py's chat-style call.
+
+    When semantic_chunks is provided and non-empty, formats them as targeted
+    context instead of/alongside full documents. Falls back to full documents
+    if no chunks available.
     """
     retrieved_docs = retrieved_docs or []
 
@@ -88,9 +117,23 @@ def build_prompt(masked_text: str, retrieved_docs: list[dict] | None = None) -> 
         "{{SCHEMA_INSTRUCTIONS}}", _generate_schema_instructions()
     )
 
+    # Determine knowledge section content based on available inputs
+    if semantic_chunks:
+        # Use semantic chunks as targeted context
+        knowledge_section = _format_semantic_chunks(semantic_chunks)
+        # If full docs are also available, append them as supplementary context
+        if retrieved_docs:
+            knowledge_section += (
+                "\n\n---\n\n#### Full Source Documents\n\n"
+                + _format_retrieved_knowledge(retrieved_docs)
+            )
+    else:
+        # Fall back to existing full-document formatting
+        knowledge_section = _format_retrieved_knowledge(retrieved_docs)
+
     user_prompt = (
         _load_template("classifier_prompt.md")
-        .replace("{{RETRIEVED_KNOWLEDGE}}", _format_retrieved_knowledge(retrieved_docs))
+        .replace("{{RETRIEVED_KNOWLEDGE}}", knowledge_section)
         .replace("{{MASKED_PROMPT}}", masked_text)
     )
 

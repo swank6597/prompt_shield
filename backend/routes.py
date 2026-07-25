@@ -116,8 +116,18 @@ def scan_prompt(request: ScanRequest):
         log.info("ECI: skipped by pre-classifier (0ms, 0 tokens used)")
     else:
         # Gray zone - enterprise context ambiguous, LLM needed
+        # Extract semantic chunks from pre_classifier's semantic_result when available
+        semantic_chunks = None
+        semantic_result = pre_result.get("semantic_result")
+        if semantic_result and isinstance(semantic_result, dict):
+            semantic_chunks = semantic_result.get("top_chunks") or None
+
         eci_start = time.perf_counter()
-        eci_raw = classify_context(result["maskedText"], entity_count=result["entityCount"])
+        eci_raw = classify_context(
+            result["maskedText"],
+            entity_count=result["entityCount"],
+            semantic_chunks=semantic_chunks,
+        )
         eci_ms = (time.perf_counter() - eci_start) * 1000
 
         if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
@@ -161,9 +171,13 @@ def scan_prompt(request: ScanRequest):
     ]
 
     total_ms = presidio_ms + pre_ms + eci_ms + policy_ms
+    hybrid_score = pre_result.get("hybrid_score")
     log.info(
-        "Scan result: %s (policy=%s) [total=%.0fms, presidio=%.0fms, pre=%.0fms, eci=%.0fms, policy=%.0fms]",
-        status, policy_result["decision"], total_ms, presidio_ms, pre_ms, eci_ms, policy_ms,
+        "Scan result: %s (policy=%s, path=%s, hybrid=%s) "
+        "[total=%.0fms, presidio=%.0fms, pre=%.0fms, eci=%.0fms, policy=%.0fms]",
+        status, policy_result["decision"], pre_result["decision_path"],
+        f"{hybrid_score:.4f}" if hybrid_score is not None else "N/A",
+        total_ms, presidio_ms, pre_ms, eci_ms, policy_ms,
     )
 
     return ScanResponse(
