@@ -99,7 +99,8 @@
       "type": "array",
       "description": "Short, plain-language justifications for the classification above. If any impactsGDPR/impactsPCIDSS/impactsHIPAA/impactsISO27001 flag is true, include at least one bullet naming which framework (and EULA/consent term, if that's what triggered impactsGDPR) and why. Used by the Policy Engine to build a human-readable explanation, and for debugging/sanity-checking the model's output.",
       "items": {
-        "type": "string"
+        "type": "string",
+        "maxLength": 200
       },
       "minItems": 1,
       "maxItems": 5
