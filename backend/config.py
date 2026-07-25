@@ -63,7 +63,7 @@ GROQ_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_GROQ_TIMEOUT", "30"))
 # --- Google Gemini settings (free tier: 15 req/min) ---
 # =============================================================================
 GEMINI_API_KEY = os.environ.get("PROMPTSHIELD_GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("PROMPTSHIELD_GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("PROMPTSHIELD_GEMINI_MODEL", "gemini-2.0-flash-lite")
 GEMINI_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_GEMINI_TIMEOUT", "30"))
 
 # =============================================================================
