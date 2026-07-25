@@ -1,22 +1,148 @@
-# Python
-venv/
-__pycache__/
-*.pyc
+# =============================================================================
+# PromptShield .gitignore - Enterprise Standards
+# =============================================================================
 
-# .NET
-bin/
-obj/
-
-# Node/Chrome extension
-node_modules/
-
-# OS/editor
-.vscode/
-.DS_Store
-Thumbs.db
-
-# Env/secrets - NEVER commit API keys
+# =============================================================================
+# Secrets & Environment - NEVER commit credentials
+# =============================================================================
 .env
+.env.*
+!.env.example
 backend/.env
 *.key
+*.pem
+*.p12
+*.pfx
 *.secret
+*.credentials
+*credentials*.json
+*secrets*.json
+**/service-account*.json
+
+# AWS
+.aws/
+aws-credentials*
+
+# =============================================================================
+# Python
+# =============================================================================
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+*.manifest
+*.spec
+
+# Pytest / Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+
+# mypy / type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =============================================================================
+# .NET
+# =============================================================================
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+packages/
+project.lock.json
+
+# =============================================================================
+# Node.js / Chrome Extension
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# =============================================================================
+# OS & Editor Files
+# =============================================================================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.fuse_hidden*
+.Trash-*
+.nfs*
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# JetBrains (IntelliJ, PyCharm)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim/Emacs
+*.swp
+*.swo
+
+# =============================================================================
+# Build & Distribution Artifacts
+# =============================================================================
+*.log
+logs/
+*.tmp
+*.bak
+*.orig
+*.patch
+
+# =============================================================================
+# Docker
+# =============================================================================
+docker-compose.override.yml
+.docker/
+
+# =============================================================================
+# Ollama / Model Files (large binary files should not be in repo)
+# =============================================================================
+*.gguf
+*.bin
+models/
+
+# =============================================================================
+# IDE / Tool specific
+# =============================================================================
+.qodo/
+.kiro/
+.cursor/
