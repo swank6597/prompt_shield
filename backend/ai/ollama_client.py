@@ -57,12 +57,24 @@ def call_ollama(
         "format": "json",
         "options": {
             # Bounds worst-case generation time - our JSON output rarely
-            # needs more than ~200-250 tokens (10 fields + a short
-            # reasoning array). Capping this matters most on constrained
-            # hardware (low-power CPU, limited RAM), where an unusually
-            # long/rambling generation is what actually causes timeouts,
-            # not just raw model size.
-            "num_predict": 300,
+            # needs more than ~300-350 tokens (14 fields, including the 4
+            # impactsX compliance flags, + a short reasoning array). Raised
+            # from 300 - not because 300 was truncating output (a live
+            # smoke-test A/B at 300 vs. 450 produced byte-identical
+            # completions either way, proving num_predict wasn't the
+            # limiting factor with temperature=0's deterministic decoding),
+            # but the larger 14-field schema does need more headroom than
+            # the original 10-field budget in the general case, so this
+            # stays raised as basic hygiene. See semantic_classifier.py's
+            # _fallback_result() docstring for the actual cause of
+            # increased fail-closed fallbacks on this schema: phi3:mini
+            # occasionally produces a genuinely malformed field (e.g. a
+            # corrupted key name, or omitting one required field) -
+            # confirmed reproducible/deterministic, not a length issue.
+            # Capping generation still matters most on constrained hardware
+            # (low-power CPU, limited RAM), where an unusually long/
+            # rambling generation is what actually causes timeouts.
+            "num_predict": 450,
             # A classifier should give a consistent verdict on the same
             # input. Ollama's default temperature (~0.7-0.8) was causing
             # the same prompt to classify differently across runs.
