@@ -52,7 +52,9 @@ function matchesHostname(hostname, expectedHosts) {
  *   pathPrefixes?: string[],
  *   promptHints: string[],
  *   sendHints: string[],
- *   apiEndpoint?: string
+ *   apiEndpoint?: string,
+ *   identitySelectors?: string[],
+ *   identityHints?: string[]
  * }} site
  * @returns {{
  *   id: string,
@@ -64,6 +66,8 @@ function matchesHostname(hostname, expectedHosts) {
  *   promptHints: string[],
  *   sendHints: string[],
  *   apiEndpoint: string,
+ *   identitySelectors: string[],
+ *   identityHints: string[],
  *   matchUrl: (url: string) => boolean
  * }}
  */
@@ -78,6 +82,11 @@ function createSiteDefinition(site) {
     promptHints: [...site.promptHints],
     sendHints: [...site.sendHints],
     apiEndpoint: site.apiEndpoint ?? DEFAULT_API_ENDPOINT,
+    // No verified selector for a site (e.g. DeepSeek, Copilot) means an
+    // empty array here, which content/identity.js treats as "always fall
+    // back to the manually-configured popup value" - see its docstring.
+    identitySelectors: site.identitySelectors ?? [],
+    identityHints: site.identityHints ?? [],
     matchUrl(url) {
       try {
         const parsedUrl = new URL(url);
@@ -114,7 +123,18 @@ export const SITE_DEFINITIONS = [
       ...COMMON_SEND_SELECTORS
     ],
     promptHints: ["message", "prompt", "chatgpt", "ask"],
-    sendHints: ["send", "submit"]
+    sendHints: ["send", "submit"],
+    // Best-effort only - ChatGPT's sidebar profile button typically shows
+    // a display name (email usually requires opening the account menu,
+    // which identity.js deliberately never simulates). Not guaranteed
+    // stable across UI redesigns - falls back to the popup value if these
+    // selectors ever stop matching.
+    identitySelectors: [
+      "[data-testid='profile-button']",
+      "button[aria-label*='profile' i]",
+      "nav [aria-label*='account' i]"
+    ],
+    identityHints: ["chatgpt account"]
   }),
   createSiteDefinition({
     id: "gemini",
@@ -131,7 +151,15 @@ export const SITE_DEFINITIONS = [
       ...COMMON_SEND_SELECTORS
     ],
     promptHints: ["gemini", "ask", "message", "prompt"],
-    sendHints: ["send", "submit", "ask"]
+    sendHints: ["send", "submit", "ask"],
+    // Google's account chip aria-label is fairly consistent across Google
+    // products: "Google Account: Name (email@domain.com)" - identity.js
+    // extracts just the email from whichever of these matches.
+    identitySelectors: [
+      "a[aria-label*='Google Account' i]",
+      "[aria-label*='Google Account' i]"
+    ],
+    identityHints: ["google account"]
   }),
   createSiteDefinition({
     id: "claude",
@@ -148,12 +176,22 @@ export const SITE_DEFINITIONS = [
       ...COMMON_SEND_SELECTORS
     ],
     promptHints: ["claude", "ask", "message", "prompt"],
-    sendHints: ["send", "submit"]
+    sendHints: ["send", "submit"],
+    // Best-effort only, same caveat as ChatGPT above - Claude's sidebar
+    // account area typically shows a display name without opening a menu.
+    identitySelectors: [
+      "button[aria-label*='account' i]",
+      "[data-testid*='profile' i]"
+    ],
+    identityHints: ["claude account"]
   }),
   createSiteDefinition({
     id: "deepseek",
     label: "DeepSeek",
     hosts: ["chat.deepseek.com", "chat.deepseek.ai"],
+    // No verified identitySelectors yet - falls back to the manually
+    // configured popup value (see identity.js). Add real selectors here
+    // once someone has inspected DeepSeek's live account-menu DOM.
     promptHints: ["deepseek", "ask", "message", "prompt"],
     sendHints: ["send", "submit", "ask"]
   }),
@@ -162,6 +200,8 @@ export const SITE_DEFINITIONS = [
     label: "Microsoft Copilot",
     hosts: ["copilot.microsoft.com", "copilot.cloud.microsoft", "www.bing.com"],
     pathPrefixes: ["/chat"],
+    // No verified identitySelectors yet - same as DeepSeek above, falls
+    // back to the manually configured popup value.
     promptHints: ["copilot", "ask", "message", "prompt"],
     sendHints: ["send", "submit", "ask"]
   })

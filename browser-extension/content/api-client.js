@@ -7,11 +7,13 @@ import { normalizeIssueList } from "../utils/scan-utils.js";
  *
  * @param {{
  *   Logger: { info: (message: string) => void, warn: (message: string) => void, error: (message: string) => void },
- *   endpoint?: string
+ *   endpoint?: string,
+ *   username?: string | null,
+ *   platform?: string | null
  * }} params
  * @returns {{ scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, eci?: import("./modal.js").EciResult, raw?: unknown }> }}
  */
-export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOINT }) {
+export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOINT, username = null, platform = null }) {
   /**
    * Sends the prompt to the background worker for scanning.
    *
@@ -22,7 +24,9 @@ export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOIN
     const response = await chrome.runtime.sendMessage({
       type: "PROMPT_GUARDIAN_SCAN_PROMPT",
       prompt,
-      endpoint
+      endpoint,
+      username,
+      platform
     });
 
     if (!response) {

@@ -18,6 +18,24 @@
         <li>Prompt observation and readout</li>
         <li>Send interception with SAFE/BLOCK flow</li>
       </ul>
+
+      <section class="identity-section">
+        <p class="section-title">Audit Identity</p>
+        <p class="description small">
+          Used as a fallback for the audit log's username when the
+          signed-in account can't be auto-detected from the AI site itself.
+        </p>
+        <div class="identity-form">
+          <input
+            type="text"
+            id="pg-username-input"
+            placeholder="you@company.com"
+            autocomplete="off"
+          />
+          <button type="button" id="pg-username-save">Save</button>
+        </div>
+        <p class="identity-status" id="pg-username-status" hidden></p>
+      </section>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

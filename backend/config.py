@@ -78,30 +78,13 @@ BEDROCK_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_BEDROCK_TIMEOUT", "30
 
 # =============================================================================
 # --- Presidio settings ---
-# =============================================================================
 PRESIDIO_MIN_SCORE = float(os.environ.get("PROMPTSHIELD_PRESIDIO_MIN_SCORE", "0.85"))
 
-# =============================================================================
-# --- Lexical Engine (TF-IDF) settings ---
-# =============================================================================
-TFIDF_PUBLIC_THRESHOLD = float(os.environ.get("PROMPTSHIELD_TFIDF_PUBLIC_THRESHOLD", "0.15"))
-TFIDF_ENTERPRISE_THRESHOLD = float(os.environ.get("PROMPTSHIELD_TFIDF_ENTERPRISE_THRESHOLD", "0.45"))
-
-# =============================================================================
-# --- Semantic Engine settings ---
-# =============================================================================
-EMBEDDING_MODEL = os.environ.get("PROMPTSHIELD_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-SEMANTIC_CHUNK_SIZE = int(os.environ.get("PROMPTSHIELD_SEMANTIC_CHUNK_SIZE", "500"))
-
-# =============================================================================
-# --- Hybrid Scoring settings ---
-# =============================================================================
-HYBRID_LEXICAL_WEIGHT = float(os.environ.get("PROMPTSHIELD_HYBRID_LEXICAL_WEIGHT", "0.4"))
-HYBRID_SEMANTIC_WEIGHT = float(os.environ.get("PROMPTSHIELD_HYBRID_SEMANTIC_WEIGHT", "0.6"))
-HYBRID_PUBLIC_THRESHOLD = float(os.environ.get("PROMPTSHIELD_HYBRID_PUBLIC_THRESHOLD", "0.30"))
-HYBRID_ENTERPRISE_THRESHOLD = float(os.environ.get("PROMPTSHIELD_HYBRID_ENTERPRISE_THRESHOLD", "0.55"))
-
-# =============================================================================
-# --- Legacy fallback ---
-# =============================================================================
-USE_LEGACY_SEARCH = os.environ.get("PROMPTSHIELD_USE_LEGACY_SEARCH", "false").lower() == "true"
+# --- Audit log settings ---
+# SQLite file backing the audit trail (backend/audit/audit_logger.py).
+# Colocated with the module by default; override for a shared location
+# (e.g. a mounted volume) without a code change.
+AUDIT_DB_PATH = os.environ.get(
+    "PROMPTSHIELD_AUDIT_DB_PATH",
+    os.path.join(os.path.dirname(__file__), "audit", "audit_log.db"),
+)
