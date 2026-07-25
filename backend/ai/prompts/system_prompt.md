@@ -91,6 +91,12 @@ must exactly match this structure:
 
 {{SCHEMA_INSTRUCTIONS}}
 
+**Critical formatting rules:**
+- Each string in the "reasoning" array MUST be under 80 characters.
+- Keep reasoning entries concise: e.g. "Contains PII (name, Aadhaar) - GDPR" not a full sentence.
+- Do NOT use special characters, newlines, or unescaped quotes inside string values.
+- Ensure your JSON is complete and properly closed (all brackets and braces matched).
+
 If you are uncertain, prefer the more conservative (more cautious)
 classification and reflect that uncertainty honestly in the
 `confidence` field rather than defaulting every field to false.

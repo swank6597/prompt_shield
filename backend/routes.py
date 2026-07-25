@@ -110,7 +110,7 @@ def scan_prompt(request: ScanRequest):
         eci_ms = 0.0
     else:
         eci_start = time.perf_counter()
-        eci_raw = classify_context(result["maskedText"])
+        eci_raw = classify_context(result["maskedText"], entity_count=result["entityCount"])
         eci_ms = (time.perf_counter() - eci_start) * 1000
 
         if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
