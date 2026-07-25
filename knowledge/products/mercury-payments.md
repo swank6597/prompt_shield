@@ -1,41 +1,43 @@
----
-title: Mercury Payments
-classification: Internal
-owner: Payments Product Team
-department: Payment Solutions
-product_owner: Director, Payments
-engineering_manager: Engineering Manager - Payments
-service_owner: Payment Platform Operations
-version: 1.0
-document_id: PRD-MP-001
-last_updated: 2026-07-23
-review_cycle: Semi-Annual
-status: Approved
-approved_by: Payments Steering Committee
-tags: [payments, authorization]
-related_documents:
-- orion-identity.md
-- merchant-registry.md
-- token-vault.md
-- atlas-analytics.md
----
+# Mercury Payments
 
-# Purpose
-Mercury Payments is NovaBank's enterprise payment authorization platform supporting multiple payment channels through a centralized authorization pipeline. It integrates with Orion Identity for authentication, Token Vault for tokenization, Merchant Registry for merchant validation, and Atlas Analytics for operational reporting.
+## Overview
 
-## Capabilities
-- Authorization and routing
-- Settlement preparation
-- Fraud integration
-- Merchant onboarding
-- Operational monitoring
+Mercury Payments is NovaBank Financial Technologies' core payment
+authorization platform. It handles real-time authorization, settlement,
+and reconciliation for card and bank-transfer transactions across
+NovaBank's retail and merchant products.
 
-|Dependency|Purpose|
-|---|---|
-|Orion Identity|Authentication|
-|Token Vault|Tokenization|
-|Merchant Registry|Merchant validation|
-|Atlas Analytics|KPIs|
+## Payment Authorization Flow
 
-## Operations
-Release cadence follows enterprise release trains. Production Readiness Reviews are mandatory before deployment. Operational dashboards monitor latency, failures, settlement backlog, and availability. KPIs include authorization success, settlement accuracy, and platform uptime. The roadmap includes intelligent routing, regional expansion, and reconciliation improvements.
+1. A transaction request arrives at the Mercury Gateway from either the
+   Nexus Customer Portal or a merchant-facing API integration.
+2. The Gateway performs a risk check via the internal Fraud Scoring
+   Service before forwarding the request to the acquiring bank.
+3. If the acquiring bank does not respond within 4 seconds, Mercury
+   retries the authorization up to three times using exponential
+   backoff before failing over to the secondary backup gateway
+   (`mercury-failover-gw`).
+4. Successful authorizations are written to the `MercuryLedger` service,
+   which reconciles nightly against the settlement files received from
+   the card networks.
+
+## Retry and Failover Behavior
+
+Mercury's retry logic is intentionally conservative: three retries,
+backoff starting at 500ms, doubling each attempt. This was chosen after
+an incident where an aggressive retry policy caused duplicate
+authorizations during a partner outage. The failover gateway runs a
+reduced feature set (authorization only, no loyalty-point calculation)
+to keep failover fast during partner-side outages.
+
+## Key Internal Terms
+
+- **Mercury Gateway** — the primary authorization service.
+- **Fraud Scoring Service** — internal risk engine, not exposed externally.
+- **MercuryLedger** — internal ledger/reconciliation service.
+- **mercury-failover-gw** — the secondary/backup authorization path.
+
+## Ownership
+
+Owned by the Payments Platform team. Any changes to retry/failover
+behavior require sign-off from the Payments Platform lead and Security.
