@@ -13,7 +13,7 @@ import logging
 import os
 import sys
 
-_LOG_LEVEL = os.environ.get("PROMPTSHIELD_LOG_LEVEL", "INFO").upper()
+_LOG_LEVEL = os.environ.get("PROMPTSHIELD_LOG_LEVEL", "DEBUG").upper()
 _ROOT_NAME = "promptshield"
 _configured = False
 

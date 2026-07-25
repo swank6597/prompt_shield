@@ -1,9 +1,18 @@
 # routes.py
 # API route definitions. Currently exposes the Presidio-only /analyze
 # endpoint (merged from the POC's api.py) plus /health. /api/scan runs the
-# full pipeline: Presidio -> ECI (ai/) -> Policy Engine (policy/), which
-# turns their combined findings into the final ALLOW/WARN/MASK/BLOCK
-# decision. Only Regex (backend/regex/) still needs to be wired in.
+# full pipeline: Presidio -> Pre-Classifier -> (optional) ECI LLM -> Policy
+# Engine, which turns combined findings into the final ALLOW/WARN/MASK/BLOCK.
+#
+# Cost-saving architecture:
+#   1. Presidio always runs (cheap, local, ~20ms)
+#   2. Pre-classifier checks if the LLM is even needed:
+#      - Trivial prompts -> skip LLM
+#      - Secrets found -> skip LLM (policy will BLOCK from Presidio alone)
+#      - PII only, no enterprise terms -> skip LLM (policy will MASK)
+#      - General knowledge, no enterprise overlap -> skip LLM
+#      - Enterprise context ambiguous -> CALL LLM (only case that needs AI)
+#   3. Policy engine makes final decision from all signals
 
 import os
 import sys
@@ -17,11 +26,7 @@ from utils.logger import get_logger
 
 # backend/ai/'s and backend/policy/'s modules use bare imports (e.g.
 # `from keyword_search import search`, `from risk_engine import
-# compute_risk_score`) that assume their own directory is on sys.path -
-# the same pattern ollama_client.py already uses for backend/ itself.
-# Mirrored here rather than refactored so those modules keep working when
-# run standalone (`python backend/ai/semantic_classifier.py`,
-# `python backend/policy/policy_engine.py`, tests/test_eci_smoke.py).
+# compute_risk_score`) that assume their own directory is on sys.path.
 _AI_DIR = os.path.join(os.path.dirname(__file__), "ai")
 _POLICY_DIR = os.path.join(os.path.dirname(__file__), "policy")
 for _extra_dir in (_AI_DIR, _POLICY_DIR):
@@ -29,17 +34,15 @@ for _extra_dir in (_AI_DIR, _POLICY_DIR):
         sys.path.insert(0, _extra_dir)
 
 from semantic_classifier import classify as classify_context  # noqa: E402
+from pre_classifier import pre_classify  # noqa: E402
 from policy_engine import decide as decide_policy  # noqa: E402
 
 log = get_logger("routes")
 
 router = APIRouter()
 
-# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK (its own internal
-# severity vocabulary, shared with rules.json). The extension only knows
-# SAFE/SANITIZE/BLOCK (see browser-extension/content/observer.js) - WARN
-# and MASK both surface as SANITIZE since neither should auto-send, but
-# both still let the user review and choose to send the sanitized prompt.
+# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK. The extension only
+# knows SAFE/SANITIZE/BLOCK - WARN and MASK both surface as SANITIZE.
 DECISION_TO_STATUS = {
     "ALLOW": "SAFE",
     "WARN": "SANITIZE",
@@ -73,6 +76,9 @@ def analyze(request: AnalyzeRequest):
 def scan_prompt(request: ScanRequest):
     log.info("Scan request received (prompt_len=%d)", len(request.prompt))
 
+    # =========================================================================
+    # Stage 1: Presidio (always runs - cheap, local, ~20ms)
+    # =========================================================================
     presidio_start = time.perf_counter()
     result = analyze_text(request.prompt)
     presidio_ms = (time.perf_counter() - presidio_start) * 1000
@@ -86,29 +92,48 @@ def scan_prompt(request: ScanRequest):
             result["entityCount"], entity_types, presidio_ms,
         )
 
-    # ECI runs on the already-masked text (never the raw prompt), and on
-    # every request - not just when Presidio finds entities - since it
-    # catches enterprise-context risk (e.g. "explain our OAuth2
-    # implementation") that contains no PII at all. classify() never
-    # raises; on any failure it returns a fail-closed fallback dict.
-    eci_start = time.perf_counter()
-    eci_raw = classify_context(result["maskedText"])
-    eci_ms = (time.perf_counter() - eci_start) * 1000
+    # =========================================================================
+    # Stage 2: Pre-Classifier (deterministic, ~1ms)
+    # Decides whether the LLM call is worth making at all.
+    # =========================================================================
+    pre_start = time.perf_counter()
+    pre_result = pre_classify(request.prompt, result["maskedText"], result)
+    pre_ms = (time.perf_counter() - pre_start) * 1000
 
-    if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
-        log.warning("ECI: fallback triggered (%.0fms) - %s", eci_ms, eci_raw["reasoning"])
+    log.info(
+        "Pre-classifier: path=%s, needs_llm=%s (%.0fms) - %s",
+        pre_result["decision_path"], pre_result["needs_llm"], pre_ms,
+        pre_result["reason"],
+    )
+
+    # =========================================================================
+    # Stage 3: ECI/LLM (only when pre-classifier says it's needed)
+    # =========================================================================
+    if not pre_result["needs_llm"]:
+        # Use the pre-classifier's deterministic ECI result
+        eci_raw = pre_result["pre_eci"]
+        eci_ms = 0.0
+        log.info("ECI: skipped by pre-classifier (0ms, 0 tokens used)")
     else:
-        log.info(
-            "ECI: intent=%s requiresEnterpriseKnowledge=%s confidence=%.2f (%.0fms)",
-            eci_raw.get("intent"), eci_raw.get("requiresEnterpriseKnowledge"),
-            eci_raw.get("confidence", 0.0), eci_ms,
-        )
+        # Gray zone - enterprise context ambiguous, LLM needed
+        eci_start = time.perf_counter()
+        eci_raw = classify_context(result["maskedText"], entity_count=result["entityCount"])
+        eci_ms = (time.perf_counter() - eci_start) * 1000
+
+        if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
+            log.warning("ECI: fallback triggered (%.0fms) - %s", eci_ms, eci_raw["reasoning"])
+        else:
+            log.info(
+                "ECI: intent=%s requiresEnterpriseKnowledge=%s confidence=%.2f (%.0fms)",
+                eci_raw.get("intent"), eci_raw.get("requiresEnterpriseKnowledge"),
+                eci_raw.get("confidence", 0.0), eci_ms,
+            )
 
     eci_result = ECIResult(**eci_raw)
 
-    # detection is the merged Regex+Presidio shape policy_engine.py expects.
-    # Regex isn't wired in yet, so this is Presidio-only for now - adding
-    # regex hits later just means extending entityTypes here.
+    # =========================================================================
+    # Stage 4: Policy Engine (deterministic, <1ms)
+    # =========================================================================
     detection = {
         "entityCount": result["entityCount"],
         "entityTypes": [entity["entity_type"] for entity in result["entities"]],
@@ -135,7 +160,11 @@ def scan_prompt(request: ScanRequest):
         for entity in result["entities"]
     ]
 
-    log.info("Scan result: %s (policy=%s)", status, policy_result["decision"])
+    total_ms = presidio_ms + pre_ms + eci_ms + policy_ms
+    log.info(
+        "Scan result: %s (policy=%s) [total=%.0fms, presidio=%.0fms, pre=%.0fms, eci=%.0fms, policy=%.0fms]",
+        status, policy_result["decision"], total_ms, presidio_ms, pre_ms, eci_ms, policy_ms,
+    )
 
     return ScanResponse(
         status=status,

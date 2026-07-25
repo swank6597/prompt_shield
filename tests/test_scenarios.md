@@ -22,6 +22,13 @@ bug is in `regex_engine.py`, `presidio_engine.py`, `helpers.py`, or
 
 ### A1. ALLOW — nothing detected
 
+Both rows below now resolve via the **Smart Analysis Router skip path**
+(`utils/helpers.py`'s `is_trivial_prompt()`) rather than a real Ollama
+call - confirm backend logs show `"ECI: skipped (trivial prompt, no
+entities)"`, not a real `"ECI: intent=..."` line, and that wall-clock is
+well under a second (previously ~30-180s for every request, since ECI
+used to run unconditionally).
+
 | Input | Expected entityTypes | Expected riskScore | Expected decision |
 |---|---|---|---|
 | `Hi, how are you?` | `[]` | 0 | ALLOW |
@@ -134,6 +141,24 @@ MASKed) is arguably too aggressive. Worth deciding with Gaurav whether
 whether PII-only combinations should be excluded from the aggregate
 BLOCK path entirely.
 
+### A9. Smart Analysis Router — skip boundary cases
+
+Deterministic, no Ollama involved either way - these confirm
+`is_trivial_prompt()`'s boundary is correct, not just its obvious cases.
+The critical row is the first one: a word-count cutoff alone can't
+distinguish it from the last, so if this regresses to a bare `len(prompt)
+<= N` check, `Explain OAuth2.` would incorrectly skip ECI entirely and
+silently break B1 below. Presidio finds nothing in any of these four
+rows (entityCount 0 throughout), so the router is the only thing
+distinguishing "skip" from "must classify."
+
+| Input | Skips ECI? | Reason |
+|---|---|---|
+| `Explain OAuth2.` | **No** - must reach ECI | 2 words, but contains real content words ("explain", "oauth2") outside the small-talk vocabulary - this is B1's exact regression-test case |
+| `How are you doing today?` | **Yes** | Every word is in the small-talk vocabulary, despite being 5 words - length alone is never sufficient to skip |
+| `sure` | **Yes** | Single word - the only place a bare length check is used (word count == 1) |
+| `Explain our Mercury architecture` | **No** - must reach ECI | 4 words, contains content words - must not be skipped by any length-based shortcut |
+
 ---
 
 ## Section B — ECI-dependent (requires live Ollama)
@@ -186,7 +211,40 @@ prompt.
 | Ollama unreachable | `0.0` | WARN, `reasoning` contains `"ECI fallback triggered"` |
 
 This is the fail-closed path - confirm it still says WARN, not ALLOW,
-when the model can't be reached at all.
+when the model can't be reached at all. Also confirm all four
+`impactsX` fields (below) come back `false` here too - `_fallback_result()`
+never speculates `true` on any boolean; only `confidence` carries the
+"couldn't classify" signal.
+
+### B5. Compliance Framework Impact (`impactsGDPR`/`impactsPCIDSS`/`impactsHIPAA`/`impactsISO27001`)
+
+Same "expected direction, not exact reasoning" caveat as B1-B3. Each row
+checks one `impactsX` field independently - they aren't mutually
+exclusive with each other or with `containsX`.
+
+| Input | Field checked | Expected | Note |
+|---|---|---|---|
+| `Our checkout flow stores the customer's card number and CVV before tokenizing it - is that step compliant?` | `impactsPCIDSS` | `true` | Payment card data |
+| `Summarize this patient's diagnosis and treatment history from their health insurance claim.` | `impactsHIPAA` | `true` | Protected health information |
+| `Explain our internal authentication service's encryption key rotation policy and security controls.` | `impactsISO27001` | `true` | Information-security-management scope; expect this to also line up with `containsInternalArchitecture: true` |
+| `Draft a EULA clause letting us share users' purchase history with advertising partners.` | `impactsGDPR` | `true` | EULA/consent-clause content over real user data - the EULA trigger added alongside the standard personal-data GDPR trigger |
+| `What's the difference between a EULA and a privacy policy?` | `impactsGDPR` | **`false`** | Restraint check - contains the word "EULA" but is a generic public/definitional question with no real user data. If this flips `true`, the model is pattern-matching the keyword rather than judging actual content - same anti-"laundering" failure mode as B1, just for compliance instead of enterprise-knowledge. |
+| `What's the capital of France?` | `impactsPCIDSS` (and check the other 3 manually) | `false` | Pure public knowledge - all four flags should be `false` |
+
+**Known limitation - confirmed via live smoke test, not a hypothetical
+risk.** Growing the schema from 10 to 14 required fields (adding the 4
+`impactsX` flags) measurably increased how often `phi3:mini` produces a
+malformed response - a corrupted field name or a missing required field
+- on this size of schema. A live A/B test at `num_predict` 300 vs. 450
+produced byte-identical completions, confirming this is a genuine
+small-model generation limitation, **not** a token-budget/truncation
+issue. In a real run against these exact B5 cases, 5 of 7 hit this path
+at least once. This is safe (every failure correctly resolves to the
+fail-closed WARN path via `_fallback_result()`, never a silent pass-
+through) but is a real accuracy/latency cost worth a team decision:
+options include trying a larger/instruction-tuned model, or splitting
+compliance mapping into its own lighter-weight schema/call. Flag to
+Gaurav alongside A4/A5/A8.
 
 ---
 
@@ -217,7 +275,9 @@ My Aadhaar number is 4567 8912 3456.
 
 - [ ] A1-A3, A6-A7: run once, exact match required (no LLM variance)
 - [ ] A4-A5, A8: known gaps - confirm they still reproduce, then decide whether to fix before demo
+- [ ] A1, A9: confirm router-skip cases hit `is_trivial_prompt()`'s skip path (fast, no Ollama call in logs) and that the two "must reach ECI" rows in A9 do NOT skip
 - [ ] B1: run 3x, decision must stay stable every time
 - [ ] B2-B3: run once, decision direction should match
-- [ ] B4: operational test, requires stopping Ollama deliberately
+- [ ] B4: operational test, requires stopping Ollama deliberately; also confirm all 4 `impactsX` fields are `false` in the fallback
+- [ ] B5: known limitation - confirmed ~5/7 rows hit the fail-closed fallback in a live run, not just an occasional flake; on a pass, decision direction (not exact reasoning) should match, with the two restraint rows (generic EULA question, pure public knowledge) as important as the positive-trigger rows. Fallback is safe (WARN, not a silent pass) but frequent enough to be a real team decision - flag alongside A4/A5/A8
 - [ ] Section C: single composite sanity check, exact entityTypes/riskScore, BLOCK decision

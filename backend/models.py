@@ -46,6 +46,10 @@ class ECIResult(BaseModel):
     containsSourceCode: bool
     containsCustomerData: bool
     containsSecrets: bool
+    impactsGDPR: bool
+    impactsPCIDSS: bool
+    impactsHIPAA: bool
+    impactsISO27001: bool
     confidence: float
     reasoning: List[str]
 
