@@ -149,11 +149,85 @@ def test_init_db_is_idempotent():
     print("PASS\n")
 
 
+# ---------------------------------------------------------------------------
+# specs/audit-dashboard-consolidation/ - schema enrichment
+# ---------------------------------------------------------------------------
+
+def test_enriched_columns_populated_when_llm_ran():
+    print("--- test_enriched_columns_populated_when_llm_ran ---")
+    audit_logger.log_scan(
+        username="alice", platform="Gemini",
+        masked_prompt="Explain our OAuth2 implementation.",
+        entity_count=0, entity_types=[],
+        eci={**FAKE_ECI, "containsSecrets": False, "impactsGDPR": False},
+        risk_score=35, matched_rules=["warn_enterprise_architecture"],
+        decision="WARN", status="SANITIZE",
+        presidio_ms=8.0, eci_ms=1200.0, policy_ms=0.3, total_ms=1208.3,
+        reason="Enterprise architecture details requested.",
+        llm_provider="groq", llm_model="llama-3.1-8b-instant",
+        decision_path="true_ambiguity",
+        device_id=7, owner_user_id=3,
+    )
+    row = _fetch_latest_row()
+    assert row["reason"] == "Enterprise architecture details requested."
+    assert row["llm_provider"] == "groq"
+    assert row["llm_model"] == "llama-3.1-8b-instant"
+    assert row["decision_path"] == "true_ambiguity"
+    assert row["device_id"] == 7
+    assert row["owner_user_id"] == 3
+    print("PASS\n")
+
+
+def test_enriched_columns_null_when_llm_skipped():
+    print("--- test_enriched_columns_null_when_llm_skipped ---")
+    audit_logger.log_scan(
+        username=None, platform=None,
+        masked_prompt="Hi, how are you?",
+        entity_count=0, entity_types=[],
+        eci={**FAKE_ECI, "containsSecrets": False, "impactsGDPR": False},
+        risk_score=0, matched_rules=[], decision="ALLOW", status="SAFE",
+        presidio_ms=1.0, eci_ms=0.0, policy_ms=0.1, total_ms=1.2,
+        reason="No policy rules matched - prompt appears safe to send.",
+        decision_path="trivial",
+        device_id=7, owner_user_id=None,
+        # llm_provider/llm_model intentionally omitted - pre-classifier
+        # skipped the LLM entirely, matching routes.py's eci_raw.pop(...,
+        # None) behavior for that path.
+    )
+    row = _fetch_latest_row()
+    assert row["llm_provider"] is None
+    assert row["llm_model"] is None
+    assert row["decision_path"] == "trivial"
+    assert row["owner_user_id"] is None
+    print("PASS\n")
+
+
+def test_pre_enrichment_calls_still_work():
+    """log_scan() calls without any of the new kwargs (as recorded by any
+    row written before this schema enrichment shipped) must still succeed -
+    all new parameters default to None."""
+    print("--- test_pre_enrichment_calls_still_work ---")
+    audit_logger.log_scan(
+        username="bob", platform="ChatGPT", masked_prompt="test",
+        entity_count=0, entity_types=[], eci=FAKE_ECI, risk_score=0,
+        matched_rules=[], decision="ALLOW", status="SAFE",
+        presidio_ms=1.0, eci_ms=0.0, policy_ms=0.1, total_ms=1.2,
+    )
+    row = _fetch_latest_row()
+    assert row["reason"] is None
+    assert row["llm_provider"] is None
+    assert row["device_id"] is None
+    print("PASS\n")
+
+
 if __name__ == "__main__":
     test_no_raw_value_reaches_the_db()
     test_defaults_to_unknown_when_identity_missing()
     test_log_scan_never_raises_on_db_failure()
     test_init_db_is_idempotent()
+    test_enriched_columns_populated_when_llm_ran()
+    test_enriched_columns_null_when_llm_skipped()
+    test_pre_enrichment_calls_still_work()
     print("=" * 60)
     print("All audit_logger tests passed.")
     print(f"(test DB at {_TEST_DB_PATH} - safe to delete)")

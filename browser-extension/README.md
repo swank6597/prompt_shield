@@ -8,11 +8,14 @@ The extension detects supported AI chat pages, finds the active prompt composer,
 
 ## Supported Sites
 
-- ChatGPT
-- Gemini
-- Claude
-- DeepSeek
-- Microsoft Copilot
+Defined per-site in `content/site-definitions.js` and mirrored in
+`manifest.json`'s `host_permissions`/`content_scripts`:
+
+- **ChatGPT** — `chatgpt.com`, `chat.openai.com` (legacy domain)
+- **Gemini** — `gemini.google.com`
+- **Claude** — `claude.ai`
+- **DeepSeek** — `chat.deepseek.com`, `chat.deepseek.ai`
+- **Microsoft Copilot** — `copilot.microsoft.com`, `copilot.cloud.microsoft`, and `www.bing.com/chat*` (Bing Chat is matched under this same site definition)
 
 ## Quick Start
 
@@ -66,13 +69,15 @@ Backend details: [`../backend/README.md`](../backend/README.md)
 
 - Manifest V3 extension structure
 - Multi-site AI chat detection
-- Prompt composer discovery using site-specific adapters and shared heuristics
+- Prompt composer discovery using site-specific adapters, weighted scoring heuristics, and shadow-DOM traversal (`querySelectorAllDeep`) for sites that render the composer inside a shadow root
 - Prompt input observation and console logging
 - Send button, Enter-key, and form submit interception
-- Prompt scan request routed through the background worker
-- In-page review popup with exact detected issues
-- User choice to send sanitized prompt, send original anyway, or cancel
-- SAFE / SANITIZE / BLOCK response handling
+- Prompt scan request routed content script → background service worker → `fetch` (the content script never calls the API directly)
+- In-page review popup (a shadow-DOM modal injected by `content/modal.js`) with exact detected issues plus an "AI Context Analysis" section (intent, document type, confidence, and risk flags such as secrets/source code/customer data/internal architecture) sourced from the backend's ECI classification
+- Client-side fallback in `utils/scan-utils.js` that infers issues from the `reason` string and an original/sanitized diff when the API response omits structured `issues`
+- User choice to send sanitized prompt, send original anyway (for `SANITIZE` results), or cancel
+- SAFE / SANITIZE / BLOCK response handling — a real `BLOCK` hides the "Send Original" option entirely, so it cannot be overridden
+- A separate, static toolbar popup (`popup/popup.html`) showing a feature summary — distinct from the in-page review modal described below; it has no interactivity beyond loading
 - Shared logger utility with consistent `[Prompt Guardian]` output
 
 ## Review Popup Flow
@@ -80,23 +85,28 @@ Backend details: [`../backend/README.md`](../backend/README.md)
 When sensitive data is detected:
 
 1. The original send is blocked.
-2. Prompt Guardian opens a popup on the page.
-3. The popup shows:
+2. Prompt Guardian opens a review modal on the page (injected via `content/modal.js`, not the toolbar popup).
+3. The modal shows:
    - Scan status (`SANITIZE` or `BLOCK`)
    - A summary reason
    - Each detected issue with type, matched value, and confidence
+   - An "AI Context Analysis" section summarizing the backend's ECI classification (intent, document type, confidence, risk flags), when available
    - The original prompt
    - The sanitized prompt
 4. The user chooses:
    - **Cancel** — nothing is sent
-   - **Send Sanitized** — the composer is updated with the sanitized prompt and that version is sent
-   - **Send Original** / **Send Anyway** — the original prompt is sent despite the warning
+   - **Send Sanitized** — the composer is updated with the sanitized prompt and that version is sent (hidden if sanitizing produced no actual change)
+   - **Send Original** / **Send Anyway** — only available for `SANITIZE` results; for a `BLOCK` this option is not shown, so the prompt cannot be sent as-is
 
-When no sensitive data is found (`SAFE`), the prompt is sent automatically without opening the popup.
+When no sensitive data is found (`SAFE`), the prompt is sent automatically without opening the modal.
 
 ## API Contract
 
-The extension posts to:
+The content script (`content/api-client.js`) never calls `fetch` itself — it
+sends a `PROMPT_GUARDIAN_SCAN_PROMPT` message via `chrome.runtime.sendMessage`
+to the background service worker (`background/background.js`), which performs
+the actual request and returns the (normalized) response. Functionally this
+still amounts to:
 
 `POST http://localhost:8081/api/scan`
 
@@ -143,6 +153,8 @@ Expected responses:
 ## Known Limitations
 
 - The prompt heuristics are intentionally generic and may need tuning if any supported site changes its DOM significantly.
-- The extension assumes the scan API is available at `localhost:8081`, but it falls back to SAFE if the API is unavailable so typing is not blocked during development.
+- The extension assumes the scan API is available at `localhost:8081`, but it falls back to SAFE if the API is unavailable (both when `background.js`'s `fetch` throws, and when `api-client.js` gets no response at all) so typing is not blocked during development.
 - Port `8080` is commonly occupied on Windows by NVIDIA Broadcast; use `8081` instead.
 - Chrome may list extension `console.warn` output under `chrome://extensions` → **Errors**. That page includes intentional warnings, not just failures. Normal scan decisions are logged with `console.log` so they stay out of the Errors list.
+- A real `BLOCK` cannot be overridden from the review modal — there is no "Send Original" option in that case, unlike `SANITIZE` results.
+- The toolbar popup (`popup/popup.html`) is static/informational only — it does not show scan history, settings, or link to the in-page review modal.

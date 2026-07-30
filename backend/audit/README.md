@@ -68,13 +68,42 @@ Single table, `scan_audit_log`, in a SQLite file at `AUDIT_DB_PATH`
 | `decision` | Internal ALLOW/WARN/MASK/BLOCK |
 | `status` | Extension-facing SAFE/SANITIZE/BLOCK — stored separately from `decision` since WARN and MASK both collapse to SANITIZE; a dashboard likely wants both granularities |
 | `presidio_ms`, `eci_ms`, `policy_ms`, `total_ms` | Perf breakdown, already computed as local timers in `routes.py` |
+| `reason` | `policy_result["explanation"]` — the human-readable reason behind `decision`, alongside the machine-readable `matched_rules` |
+| `llm_provider`, `llm_model` | Which Smart LLM Router provider/model actually served the request (`local`/`groq`/`gemini`/`bedrock` + its configured model) — `NULL` when the pre-classifier skipped the LLM entirely |
+| `decision_path` | The pre-classifier's routing label (`trivial`, `hard_block`, `pii_only`, `enterprise_detected`, `true_ambiguity`, etc. — see `ai/pre_classifier.py`) |
+| `device_id`, `owner_user_id` | The **authenticated** identity from `backend/auth/` (`require_api_key`) — see "Dual identity" below |
 
 Indexed on `timestamp`, `decision`, `platform` — the three dimensions a
-dashboard aggregates by (counts by day/decision/platform). No `username`
-index yet; add one later if a per-user drill-down view needs it.
+dashboard aggregates by (counts by day/decision/platform). No index yet on
+`device_id`/`decision_path`/`llm_provider`; add one later if a concrete
+dashboard query needs it — these aren't established query dimensions the
+way the indexed three already are.
+
+`reason`/`llm_provider`/`llm_model`/`decision_path`/`device_id`/
+`owner_user_id` were added via additive `ALTER TABLE ... ADD COLUMN`
+(`_init_db()`, guarding against "column already exists" since SQLite has no
+`ADD COLUMN IF NOT EXISTS`) — existing rows from before this change simply
+have `NULL` in these columns, nothing is migrated or backfilled.
 
 No child tables / normalization — over-engineering for a single-writer audit
 log at this scale.
+
+## Dual identity: `device_id`/`owner_user_id` vs. `username`/`platform`
+
+Two independent identity mechanisms, not a fallback chain:
+
+- **`device_id`/`owner_user_id`** — the API-key-authenticated device (and its
+  bound user account, if any) from `backend/auth/`. Trustworthy: a request
+  can't reach `log_scan()` at all without a valid, non-revoked key
+  (`require_api_key` in `routes.py`). Join back to `backend/auth/auth.db`'s
+  `devices`/`users` tables (a separate SQLite file — this is an
+  application-level join, not a SQL foreign key) for a verified identity.
+- **`username`/`platform`** — the best-effort, human-readable identity
+  described below. Not authenticated; can be `"unknown"`.
+
+A dashboard can use either independently: `device_id` for a trustworthy
+audit trail, `username`/`platform` for a readable one — see
+`specs/audit-dashboard-consolidation/design.md`.
 
 ## `username` / `platform`
 

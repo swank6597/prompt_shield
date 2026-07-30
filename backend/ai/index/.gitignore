@@ -1,0 +1,4 @@
+# Exclude generated index files
+faiss.index
+chunks.json
+mtimes.json

@@ -1,56 +1,53 @@
 # routes.py
 # API route definitions. Currently exposes the Presidio-only /analyze
 # endpoint (merged from the POC's api.py) plus /health. /api/scan runs the
-# full pipeline: Presidio -> Smart Analysis Router -> ECI (ai/) -> Policy
-# Engine (policy/), which turns their combined findings into the final
-# ALLOW/WARN/MASK/BLOCK decision. Only Regex (backend/regex/) still needs
-# to be wired in.
+# full pipeline: Presidio -> Pre-Classifier -> (optional) ECI LLM -> Policy
+# Engine, which turns combined findings into the final ALLOW/WARN/MASK/BLOCK.
 #
-# The "Smart Analysis Router" and "Orchestrator Agent" from the original
-# hackathon plan collapse into one deterministic gate here rather than
-# separate modules: Presidio always runs (cheap, local), and
-# is_trivial_prompt() decides whether the one expensive step - the ECI
-# Ollama call - is worth making at all. This is intentionally NOT agentic:
-# an LLM call to decide whether to make an LLM call would add 30-180s of
-# latency for zero benefit on this hardware.
+# Cost-saving architecture:
+#   1. Presidio always runs (cheap, local, ~20ms)
+#   2. Pre-classifier checks if the LLM is even needed:
+#      - Trivial prompts -> skip LLM
+#      - Secrets found -> skip LLM (policy will BLOCK from Presidio alone)
+#      - PII only, no enterprise terms -> skip LLM (policy will MASK)
+#      - General knowledge, no enterprise overlap -> skip LLM
+#      - Enterprise context ambiguous -> CALL LLM (only case that needs AI)
+#   3. Policy engine makes final decision from all signals
+#   4. Audit trail: every decision is persisted (backend/audit/) - see the
+#      log_scan() call at the end of scan_prompt().
 
 import os
 import sys
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from audit.audit_logger import log_scan
 from models import AnalyzeRequest, AnalyzeResponse, ECIResult, EntityResult, ScanRequest, ScanResponse
 from presidio.presidio_engine import analyze_text
-from utils.helpers import is_trivial_prompt
 from utils.logger import get_logger
+from auth import service as auth_service
+from auth.dependencies import require_api_key
 
 # backend/ai/'s and backend/policy/'s modules use bare imports (e.g.
 # `from keyword_search import search`, `from risk_engine import
-# compute_risk_score`) that assume their own directory is on sys.path -
-# the same pattern ollama_client.py already uses for backend/ itself.
-# Mirrored here rather than refactored so those modules keep working when
-# run standalone (`python backend/ai/semantic_classifier.py`,
-# `python backend/policy/policy_engine.py`, tests/test_eci_smoke.py).
+# compute_risk_score`) that assume their own directory is on sys.path.
 _AI_DIR = os.path.join(os.path.dirname(__file__), "ai")
 _POLICY_DIR = os.path.join(os.path.dirname(__file__), "policy")
 for _extra_dir in (_AI_DIR, _POLICY_DIR):
     if _extra_dir not in sys.path:
         sys.path.insert(0, _extra_dir)
 
-from semantic_classifier import classify as classify_context, skipped_result  # noqa: E402
+from semantic_classifier import classify as classify_context  # noqa: E402
+from pre_classifier import pre_classify  # noqa: E402
 from policy_engine import decide as decide_policy  # noqa: E402
 
 log = get_logger("routes")
 
 router = APIRouter()
 
-# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK (its own internal
-# severity vocabulary, shared with rules.json). The extension only knows
-# SAFE/SANITIZE/BLOCK (see browser-extension/content/observer.js) - WARN
-# and MASK both surface as SANITIZE since neither should auto-send, but
-# both still let the user review and choose to send the sanitized prompt.
+# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK. The extension only
+# knows SAFE/SANITIZE/BLOCK - WARN and MASK both surface as SANITIZE.
 DECISION_TO_STATUS = {
     "ALLOW": "SAFE",
     "WARN": "SANITIZE",
@@ -81,10 +78,16 @@ def analyze(request: AnalyzeRequest):
 
 
 @router.post("/api/scan", response_model=ScanResponse)
-def scan_prompt(request: ScanRequest):
+def scan_prompt(request: ScanRequest, device: auth_service.Device = Depends(require_api_key)):
     request_start = time.perf_counter()
-    log.info("Scan request received (prompt_len=%d)", len(request.prompt))
+    log.info(
+        "Scan request received (prompt_len=%d, device_id=%d, owner_user_id=%s)",
+        len(request.prompt), device.id, device.owner_user_id,
+    )
 
+    # =========================================================================
+    # Stage 1: Presidio (always runs - cheap, local, ~20ms)
+    # =========================================================================
     presidio_start = time.perf_counter()
     result = analyze_text(request.prompt)
     presidio_ms = (time.perf_counter() - presidio_start) * 1000
@@ -98,21 +101,42 @@ def scan_prompt(request: ScanRequest):
             result["entityCount"], entity_types, presidio_ms,
         )
 
-    # Smart Analysis Router: skip the expensive ECI/Ollama call for
-    # trivial prompts ("hi", "") - but only when Presidio also found
-    # nothing, so anything Presidio flags still gets the full ECI pass
-    # regardless of length. ECI otherwise runs on the already-masked text
-    # (never the raw prompt), since it catches enterprise-context risk
-    # (e.g. "explain our OAuth2 implementation") that contains no PII at
-    # all. classify() never raises; on any failure it returns a
-    # fail-closed fallback dict.
-    if result["entityCount"] == 0 and is_trivial_prompt(request.prompt):
-        log.info("ECI: skipped (trivial prompt, no entities) (0ms)")
-        eci_raw = skipped_result("trivial prompt, no entities detected")
+    # =========================================================================
+    # Stage 2: Pre-Classifier (deterministic, ~1ms)
+    # Decides whether the LLM call is worth making at all.
+    # =========================================================================
+    pre_start = time.perf_counter()
+    pre_result = pre_classify(request.prompt, result["maskedText"], result)
+    pre_ms = (time.perf_counter() - pre_start) * 1000
+
+    log.info(
+        "Pre-classifier: path=%s, needs_llm=%s (%.0fms) - %s",
+        pre_result["decision_path"], pre_result["needs_llm"], pre_ms,
+        pre_result["reason"],
+    )
+
+    # =========================================================================
+    # Stage 3: ECI/LLM (only when pre-classifier says it's needed)
+    # =========================================================================
+    if not pre_result["needs_llm"]:
+        # Use the pre-classifier's deterministic ECI result
+        eci_raw = pre_result["pre_eci"]
         eci_ms = 0.0
+        log.info("ECI: skipped by pre-classifier (0ms, 0 tokens used)")
     else:
+        # Gray zone - enterprise context ambiguous, LLM needed
+        # Extract semantic chunks from pre_classifier's semantic_result when available
+        semantic_chunks = None
+        semantic_result = pre_result.get("semantic_result")
+        if semantic_result and isinstance(semantic_result, dict):
+            semantic_chunks = semantic_result.get("top_chunks") or None
+
         eci_start = time.perf_counter()
-        eci_raw = classify_context(result["maskedText"])
+        eci_raw = classify_context(
+            result["maskedText"],
+            entity_count=result["entityCount"],
+            semantic_chunks=semantic_chunks,
+        )
         eci_ms = (time.perf_counter() - eci_start) * 1000
 
         if eci_raw.get("confidence") == 0.0 and any("fallback" in r.lower() for r in eci_raw.get("reasoning", [])):
@@ -124,11 +148,20 @@ def scan_prompt(request: ScanRequest):
                 eci_raw.get("confidence", 0.0), eci_ms,
             )
 
+    # semantic_classifier.classify() stashes these on a real LLM call (never
+    # part of ai/schema.json's public contract) so the audit trail can
+    # report which provider/model served the request - pop them before
+    # building ECIResult so they never leak into the client-facing response
+    # or trip Pydantic on an unexpected field. Absent (None) when the
+    # pre-classifier skipped the LLM entirely.
+    llm_provider = eci_raw.pop("_llm_provider", None)
+    llm_model = eci_raw.pop("_llm_model", None)
+
     eci_result = ECIResult(**eci_raw)
 
-    # detection is the merged Regex+Presidio shape policy_engine.py expects.
-    # Regex isn't wired in yet, so this is Presidio-only for now - adding
-    # regex hits later just means extending entityTypes here.
+    # =========================================================================
+    # Stage 4: Policy Engine (deterministic, <1ms)
+    # =========================================================================
     detection = {
         "entityCount": result["entityCount"],
         "entityTypes": [entity["entity_type"] for entity in result["entities"]],
@@ -155,24 +188,41 @@ def scan_prompt(request: ScanRequest):
         for entity in result["entities"]
     ]
 
-    log.info("Scan result: %s (policy=%s)", status, policy_result["decision"])
+    total_ms = presidio_ms + pre_ms + eci_ms + policy_ms
+    hybrid_score = pre_result.get("hybrid_score")
+    log.info(
+        "Scan result: %s (policy=%s, path=%s, hybrid=%s) "
+        "[total=%.0fms, presidio=%.0fms, pre=%.0fms, eci=%.0fms, policy=%.0fms]",
+        status, policy_result["decision"], pre_result["decision_path"],
+        f"{hybrid_score:.4f}" if hybrid_score is not None else "N/A",
+        total_ms, presidio_ms, pre_ms, eci_ms, policy_ms,
+    )
 
     # Audit trail: masked_prompt only (never request.prompt), entity_types
     # only (never entities[].value, the raw matched value used in the
-    # `issues` list two lines below). log_scan() never raises - a DB
-    # failure logs a warning and is swallowed, never affecting this response.
-    total_ms = (time.perf_counter() - request_start) * 1000
+    # `issues` list above). log_scan() never raises - a DB failure logs a
+    # warning and is swallowed, never affecting this response. Carries both
+    # the authenticated device identity (device_id/owner_user_id, from
+    # require_api_key above) and the best-effort display identity
+    # (username/platform, from the extension) - see
+    # specs/audit-dashboard-consolidation/design.md's "Dual identity".
     log_scan(
+        device_id=device.id,
+        owner_user_id=device.owner_user_id,
         username=request.username,
         platform=request.platform,
         masked_prompt=result["maskedText"],
         entity_count=result["entityCount"],
         entity_types=sorted(set(detection["entityTypes"])),
         eci=eci_raw,
+        reason=policy_result["explanation"],
         risk_score=policy_result["riskScore"],
         matched_rules=policy_result["matchedRules"],
         decision=policy_result["decision"],
         status=status,
+        decision_path=pre_result["decision_path"],
+        llm_provider=llm_provider,
+        llm_model=llm_model,
         presidio_ms=presidio_ms,
         eci_ms=eci_ms,
         policy_ms=policy_ms,

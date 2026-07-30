@@ -3,7 +3,9 @@
 # to SQLite: the already-masked prompt (never the raw prompt), entity TYPES
 # only (never the raw matched values used in the live response's issues
 # list), the ECI classification, and the Policy Engine's decision. Backs the
-# future dashboard (counts by decision/day/platform).
+# dashboard (specs/audit-dashboard-consolidation/, specs/dashboard/ once
+# written) - counts by decision/day/platform, and now also by device/LLM
+# provider/pipeline path.
 #
 # Known limitation - see README.md: this guarantee is bounded by Presidio's
 # recall. A detection below presidio_engine.py's MIN_SCORE is filtered out
@@ -74,14 +76,39 @@ _INDEXES = (
     "CREATE INDEX IF NOT EXISTS idx_scan_audit_platform ON scan_audit_log(platform);",
 )
 
+# Added by specs/audit-dashboard-consolidation/ (Requirement 3/4) - a
+# human-readable `reason`, which LLM actually served the request (NULL when
+# the pre-classifier skipped it), the pre-classifier's routing label, and
+# the authenticated device/user (from backend/auth/) alongside the existing
+# best-effort username/platform. SQLite has no `ADD COLUMN IF NOT EXISTS`,
+# so each is attempted and the "duplicate column" error is swallowed -
+# additive and idempotent across restarts, same guarantee _SCHEMA already
+# provides for the table itself. No new index: none of these are an
+# established dashboard-query dimension yet (see design.md).
+_NEW_COLUMNS = (
+    ("reason", "TEXT"),
+    ("llm_provider", "TEXT"),
+    ("llm_model", "TEXT"),
+    ("decision_path", "TEXT"),
+    ("device_id", "INTEGER"),
+    ("owner_user_id", "INTEGER"),
+)
+
 
 def _init_db() -> None:
-    """Idempotent - CREATE TABLE/INDEX IF NOT EXISTS never wipes prior rows."""
+    """Idempotent - CREATE TABLE/INDEX IF NOT EXISTS never wipes prior rows,
+    and ADD COLUMN failures (column already exists) are swallowed the same
+    way."""
     os.makedirs(os.path.dirname(AUDIT_DB_PATH), exist_ok=True)
     with sqlite3.connect(AUDIT_DB_PATH) as conn:
         conn.execute(_SCHEMA)
         for statement in _INDEXES:
             conn.execute(statement)
+        for column, sql_type in _NEW_COLUMNS:
+            try:
+                conn.execute(f"ALTER TABLE scan_audit_log ADD COLUMN {column} {sql_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists from a prior run
         conn.commit()
 
 
@@ -104,6 +131,12 @@ def log_scan(
     eci_ms: float,
     policy_ms: float,
     total_ms: float,
+    reason: str | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    decision_path: str | None = None,
+    device_id: int | None = None,
+    owner_user_id: int | None = None,
 ) -> None:
     """
     Persists one scan's privacy-safe audit record. Never raises - any
@@ -115,6 +148,12 @@ def log_scan(
     the raw prompt here. entity_types must be type strings only - never
     pass entities[].value (the raw matched value used in the live
     response's issues list).
+
+    device_id/owner_user_id are the authenticated identity from
+    backend/auth/ (require_api_key); username/platform are the best-effort
+    display identity from the extension. Both are independent columns, not
+    a fallback chain - see specs/audit-dashboard-consolidation/design.md's
+    "Dual identity".
     """
     try:
         with sqlite3.connect(AUDIT_DB_PATH) as conn:
@@ -132,8 +171,10 @@ def log_scan(
                     eci_impacts_pcidss, eci_impacts_hipaa,
                     eci_impacts_iso27001, eci_reasoning,
                     risk_score, matched_rules, decision, status,
-                    presidio_ms, eci_ms, policy_ms, total_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    presidio_ms, eci_ms, policy_ms, total_ms,
+                    reason, llm_provider, llm_model, decision_path,
+                    device_id, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
@@ -164,6 +205,12 @@ def log_scan(
                     eci_ms,
                     policy_ms,
                     total_ms,
+                    reason,
+                    llm_provider,
+                    llm_model,
+                    decision_path,
+                    device_id,
+                    owner_user_id,
                 ),
             )
             conn.commit()
@@ -203,5 +250,11 @@ if __name__ == "__main__":
         eci_ms=0.0,
         policy_ms=0.5,
         total_ms=13.1,
+        reason="Detected 1 sensitive item(s): EMAIL_ADDRESS",
+        llm_provider=None,
+        llm_model=None,
+        decision_path="pii_only",
+        device_id=1,
+        owner_user_id=None,
     )
     print(f"Logged one test row to {AUDIT_DB_PATH}")

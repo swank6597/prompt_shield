@@ -1,0 +1,467 @@
+{
+  "pbtResults": {
+    "2.2 Write property test for IDF correctness (Property 1)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784976042277
+    },
+    "2.3 Write property test for TF-IDF score bounds (Property 2)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784976241199
+    },
+    "2.4 Write property test for verdict threshold consistency (Property 3)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784976412110
+    },
+    "4.4 Write property test for semantic score bounds and ordering (Property 5)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784977604022
+    },
+    "4.3 Write property test for document chunking bounds (Property 4)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784977779482
+    },
+    "6.3 Write property test for hybrid score formula (Property 7)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784978610638
+    },
+    "6.4 Write property test for hybrid routing thresholds (Property 8)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784978652520
+    },
+    "7.2 Write property test for prompt builder context inclusion (Property 9)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784978688256
+    },
+    "6.2 Write property test for pre-classifier priority routing (Property 6)": {
+      "status": "passed",
+      "lastRunTimestamp": 1784978769649
+    }
+  },
+  "executionHistory": {
+    "1.1 Add new environment variables to `backend/config.py`": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288310
+      },
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975307931
+      },
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975404952
+      }
+    ],
+    "1.2 Update `backend/.env.example` with new variable placeholders": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288381
+      },
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975308652
+      },
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975405857
+      }
+    ],
+    "1.3 Add `sentence-transformers` and `faiss-cpu` to `backend/requirements.txt`": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288442
+      },
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975309470
+      },
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975406842
+      }
+    ],
+    "2.1 Create `backend/ai/lexical_engine.py` with `LexicalEngine` class": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288508
+      },
+      {
+        "executionId": "a55561c7-5a0b-4f09-92bd-39252cc858a2",
+        "chatSessionId": "sess_447648fa-8e25-4069-a75a-5da7fc4d6c59",
+        "timestamp": 1784975494646
+      },
+      {
+        "executionId": "a55561c7-5a0b-4f09-92bd-39252cc858a2",
+        "chatSessionId": "sess_447648fa-8e25-4069-a75a-5da7fc4d6c59",
+        "timestamp": 1784975803767
+      }
+    ],
+    "3. Checkpoint - Lexical engine complete": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288656
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977034812
+      }
+    ],
+    "4.1 Create `backend/ai/semantic_engine.py` with `SemanticEngine` class": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288723
+      },
+      {
+        "executionId": "e904df2d-cd2a-409f-9077-4b3f537b4beb",
+        "chatSessionId": "sess_291e1534-ec33-4600-89ba-dfe6afafe9dc",
+        "timestamp": 1784976685774
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977033820
+      }
+    ],
+    "4.2 Create `backend/ai/index/` directory with `.gitkeep`": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288790
+      },
+      {
+        "executionId": "e904df2d-cd2a-409f-9077-4b3f537b4beb",
+        "chatSessionId": "sess_291e1534-ec33-4600-89ba-dfe6afafe9dc",
+        "timestamp": 1784976641945
+      },
+      {
+        "executionId": "e904df2d-cd2a-409f-9077-4b3f537b4beb",
+        "chatSessionId": "sess_291e1534-ec33-4600-89ba-dfe6afafe9dc",
+        "timestamp": 1784976681564
+      }
+    ],
+    "5. Checkpoint - Semantic engine complete": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288849
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977804886
+      }
+    ],
+    "6.1 Update `backend/ai/pre_classifier.py` with three-tier routing logic": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288912
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977820498
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978165724
+      }
+    ],
+    "7.1 Update `backend/ai/prompt_builder.py` to accept and format semantic chunks": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975288988
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977821461
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978166481
+      }
+    ],
+    "8. Checkpoint - All components wired together": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975289052
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784979185172
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784979260497
+      }
+    ],
+    "9.1 Create `tests/conftest.py` with shared fixtures": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975289119
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978178854
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978788374
+      }
+    ],
+    "9.2 Verify routes.py integration and update if needed": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975289175
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978793380
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978971658
+      }
+    ],
+    "10. Final checkpoint - Feature complete": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975289235
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784979265287
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784979366496
+      }
+    ],
+    "1. Add configuration variables and dependencies": [
+      {
+        "executionId": "03e83d08-40ff-4b81-ab2e-e6f3520ab087",
+        "chatSessionId": "sess_c6145296-8c63-41fe-bf6e-80030242f2af",
+        "timestamp": 1784975406923
+      }
+    ],
+    "2. Implement the Lexical Engine": [
+      {
+        "executionId": "a55561c7-5a0b-4f09-92bd-39252cc858a2",
+        "chatSessionId": "sess_447648fa-8e25-4069-a75a-5da7fc4d6c59",
+        "timestamp": 1784975803914
+      }
+    ],
+    "2.2 Write property test for IDF correctness (Property 1)": [
+      {
+        "executionId": "af48c25b-698a-42b8-bcaa-9fa31551ae3d",
+        "chatSessionId": "sess_5b3851ff-6fb2-40b0-ba98-ca7c9b38e5b5",
+        "timestamp": 1784975830841
+      },
+      {
+        "executionId": "af48c25b-698a-42b8-bcaa-9fa31551ae3d",
+        "chatSessionId": "sess_5b3851ff-6fb2-40b0-ba98-ca7c9b38e5b5",
+        "timestamp": 1784976055349
+      }
+    ],
+    "2.3 Write property test for TF-IDF score bounds (Property 2)": [
+      {
+        "executionId": "c2e646a0-0333-419e-b684-17c46d164dc9",
+        "chatSessionId": "sess_699bcbe2-4d5f-4a58-a8fb-09d64c00122b",
+        "timestamp": 1784976127871
+      },
+      {
+        "executionId": "c2e646a0-0333-419e-b684-17c46d164dc9",
+        "chatSessionId": "sess_699bcbe2-4d5f-4a58-a8fb-09d64c00122b",
+        "timestamp": 1784976253217
+      }
+    ],
+    "2.4 Write property test for verdict threshold consistency (Property 3)": [
+      {
+        "executionId": "3f95a73e-e99e-4fc3-bbe3-2f5e4275b8c8",
+        "chatSessionId": "sess_f1053d5d-fe28-456d-8188-d81f33f4c7dc",
+        "timestamp": 1784976269033
+      },
+      {
+        "executionId": "3f95a73e-e99e-4fc3-bbe3-2f5e4275b8c8",
+        "chatSessionId": "sess_f1053d5d-fe28-456d-8188-d81f33f4c7dc",
+        "timestamp": 1784976424298
+      }
+    ],
+    "4.3 Write property test for document chunking bounds (Property 4)": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977005501
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977043848
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977798283
+      }
+    ],
+    "4.4 Write property test for semantic score bounds and ordering (Property 5)": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977005595
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977044620
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977799097
+      }
+    ],
+    "6.2 Write property test for pre-classifier priority routing (Property 6)": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977005734
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978175969
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978785388
+      }
+    ],
+    "6.3 Write property test for hybrid score formula (Property 7)": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977005828
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978176721
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978786003
+      }
+    ],
+    "6.4 Write property test for hybrid routing thresholds (Property 8)": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977005909
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978177365
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978786743
+      }
+    ],
+    "7.2 Write property test for prompt builder context inclusion (Property 9)": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977005982
+      },
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784978178098
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978787452
+      }
+    ],
+    "9.3 Write integration tests for end-to-end routing decisions": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977006046
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978984786
+      },
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784979171752
+      }
+    ],
+    "4. Implement the Semantic Engine": [
+      {
+        "executionId": "1e230759-5383-4db2-80a5-4e0e37a8e12e",
+        "chatSessionId": "sess_1931115e-b7ad-4526-8be1-25afe2c69d34",
+        "timestamp": 1784977799188
+      }
+    ],
+    "6. Update Pre-Classifier with hybrid routing": [
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978786824
+      }
+    ],
+    "7. Update Prompt Builder with semantic chunks": [
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784978787551
+      }
+    ],
+    "9. Integration wiring and final touches": [
+      {
+        "executionId": "6dc8182f-d7df-4c5c-aa50-005343db6bfb",
+        "chatSessionId": "sess_9912ffa3-c25c-4ae0-a9ad-1a95133e9311",
+        "timestamp": 1784979171841
+      }
+    ]
+  }
+}
