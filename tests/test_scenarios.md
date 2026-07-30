@@ -14,6 +14,11 @@ decision - "expected direction" is guaranteed, exact wording of
 full pipeline (pre-classifier/ECI/policy) - see `backend/README.md`'s
 Endpoints section for both request/response shapes.
 
+**`/api/scan` now requires an `X-API-Key` header** (see `backend/README.md`'s
+Authentication section) - enroll a device once via `POST /devices/enroll`
+and pass the returned key on every scan request, including through Swagger UI
+(use the "Authorize" button, or add the header manually per request).
+
 ---
 
 ## Section A — Deterministic (Presidio + Policy only)

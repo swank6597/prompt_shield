@@ -44,6 +44,10 @@ pip-delete-this-directory.txt
 *.manifest
 *.spec
 
+# SQLite databases (auth.db, and any future audit/dashboard db)
+*.db
+*.db-journal
+
 # Pytest / Coverage
 .pytest_cache/
 .coverage

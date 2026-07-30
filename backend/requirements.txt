@@ -18,6 +18,10 @@ google-genai            # Google Gemini (new SDK, replaces deprecated google-gen
 # --- Config management ---
 python-dotenv           # Load secrets from .env file (never committed)
 
+# --- Authentication (see specs/authentication/) ---
+bcrypt                  # Password / API-key hashing
+pyjwt                   # Access-token (JWT) issuance and verification
+
 # --- Lexical + Semantic Retrieval Engine ---
 sentence-transformers==3.4.1    # Local embedding model (all-MiniLM-L6-v2)
 faiss-cpu==1.14.3               # FAISS vector similarity search (CPU-only)

@@ -226,6 +226,10 @@ Response:
 
 Primary endpoint used by the browser extension. Runs the full pipeline (Presidio + Smart Router + ECI + Policy Engine).
 
+**Requires an `X-API-Key` header** (see [Authentication](#authentication) below) -
+requests without one, or with an unknown/revoked key, get `401 Unauthorized` before
+the pipeline runs.
+
 Request:
 ```json
 { "prompt": "My email is john.doe@example.com and my phone is 555-123-4567" }
@@ -265,6 +269,27 @@ Response when no sensitive data is found:
 | `SAFE` | No risk detected — prompt can be sent as-is |
 | `SANITIZE` | Sensitive data detected; sanitized prompt available for review |
 | `BLOCK` | High-risk content — policy engine blocks the prompt entirely |
+
+## Authentication
+
+See [`specs/authentication/`](../specs/authentication/) for the full design. Summary:
+
+- **`/api/scan` requires an `X-API-Key` header.** Enroll a device first:
+  `POST /devices/enroll {"label": "my-laptop"}` → returns `apiKey` once (it is
+  never retrievable again - store it in the extension's local storage).
+- **`/auth/*` and `/devices/*`** (except `/devices/enroll`) require a dashboard user
+  session: `POST /auth/login {"username": "...", "password": "..."}` → returns a
+  bearer `accessToken`, sent as `Authorization: Bearer <token>` on subsequent calls.
+  Device-management endpoints (`GET /devices`, `POST /devices/{id}/revoke`,
+  `GET /auth/audit-log`) additionally require the `admin` role.
+- **No self-service signup.** Create the first admin account with
+  `python scripts/create_admin.py` (see that script's `--help`).
+- **Config:** `PROMPTSHIELD_AUTH_SECRET_KEY` is required (no safe default - the
+  backend refuses to start without it); see `.env.example` for the full list of
+  `PROMPTSHIELD_AUTH_*` settings.
+- These three route groups are mounted as separate sub-apps in `app.py` so
+  `/auth/*`/`/devices/*` can have a different (non-wildcard) CORS policy than
+  `/api/scan` - each has its own `/docs` (e.g. `/auth/docs`, `/devices/docs`).
 
 ## Project Structure
 

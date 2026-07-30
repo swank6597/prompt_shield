@@ -18,11 +18,13 @@ import os
 import sys
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from models import AnalyzeRequest, AnalyzeResponse, ECIResult, EntityResult, ScanRequest, ScanResponse
 from presidio.presidio_engine import analyze_text
 from utils.logger import get_logger
+from auth import service as auth_service
+from auth.dependencies import require_api_key
 
 # backend/ai/'s and backend/policy/'s modules use bare imports (e.g.
 # `from keyword_search import search`, `from risk_engine import
@@ -73,8 +75,11 @@ def analyze(request: AnalyzeRequest):
 
 
 @router.post("/api/scan", response_model=ScanResponse)
-def scan_prompt(request: ScanRequest):
-    log.info("Scan request received (prompt_len=%d)", len(request.prompt))
+def scan_prompt(request: ScanRequest, device: auth_service.Device = Depends(require_api_key)):
+    log.info(
+        "Scan request received (prompt_len=%d, device_id=%d, owner_user_id=%s)",
+        len(request.prompt), device.id, device.owner_user_id,
+    )
 
     # =========================================================================
     # Stage 1: Presidio (always runs - cheap, local, ~20ms)
