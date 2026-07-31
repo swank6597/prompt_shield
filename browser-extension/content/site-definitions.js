@@ -124,16 +124,17 @@ export const SITE_DEFINITIONS = [
     ],
     promptHints: ["message", "prompt", "chatgpt", "ask"],
     sendHints: ["send", "submit"],
-    // Best-effort only - ChatGPT's sidebar profile button typically shows
-    // a display name (email usually requires opening the account menu,
-    // which identity.js deliberately never simulates). Not guaranteed
-    // stable across UI redesigns - falls back to the popup value if these
-    // selectors ever stop matching.
-    identitySelectors: [
-      "[data-testid='profile-button']",
-      "button[aria-label*='profile' i]",
-      "nav [aria-label*='account' i]"
-    ],
+    // No identitySelectors: tried this (see git history) and
+    // "nav [aria-label*='account' i]" matched a broad sidebar container
+    // rather than a small profile chip, so textContent picked up
+    // unrelated nested text (a conversation title, a pin/unpin menu
+    // action) - a generic hint word happened to appear inside that text
+    // and it scored as a confident match, landing a wrong value in the
+    // audit log. That's worse than falling back to the manual popup
+    // value, so this is manual-only now, same as DeepSeek/Copilot below.
+    // Only reintroduce with a selector confirmed (via live DOM
+    // inspection) to target the profile button specifically, not a
+    // container that also holds conversation history.
     identityHints: ["chatgpt account"]
   }),
   createSiteDefinition({

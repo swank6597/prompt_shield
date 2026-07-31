@@ -1,6 +1,9 @@
 # test_audit_logger.py
 # Verifies backend/audit/audit_logger.py's core safety guarantees:
-#   (a) only masked_prompt/entity_types ever reach the DB - no raw values
+#   (a) entities[].value (the raw matched value) never reaches the DB -
+#       only entity TYPE strings do; the raw_prompt column is a separate,
+#       deliberate exception (this is an enterprise audit/compliance
+#       product - see README.md's "Raw prompt storage")
 #   (b) log_scan() never raises, even when the underlying write fails
 #   (c) table creation is idempotent - re-running _init_db() never wipes rows
 #
@@ -220,6 +223,42 @@ def test_pre_enrichment_calls_still_work():
     print("PASS\n")
 
 
+# ---------------------------------------------------------------------------
+# Raw prompt storage - always on (see README.md's "Raw prompt storage")
+# ---------------------------------------------------------------------------
+
+def test_raw_prompt_is_always_stored():
+    print("--- test_raw_prompt_is_always_stored ---")
+    audit_logger.log_scan(
+        username="alice", platform="ChatGPT",
+        masked_prompt="My email is <EMAIL_ADDRESS>",
+        entity_count=1, entity_types=["EMAIL_ADDRESS"], eci=FAKE_ECI,
+        risk_score=5, matched_rules=["mask_personal_identifiers"],
+        decision="MASK", status="SANITIZE",
+        presidio_ms=1.0, eci_ms=0.0, policy_ms=0.1, total_ms=1.2,
+        raw_prompt="My email is alice@example.com",
+    )
+    row = _fetch_latest_row()
+    assert row["raw_prompt"] == "My email is alice@example.com"
+    print("PASS\n")
+
+
+def test_raw_prompt_defaults_to_null_when_not_passed():
+    """A caller that doesn't pass raw_prompt (e.g. an older row, or a
+    future caller that genuinely doesn't have it) gets NULL, not an
+    error - the parameter is optional, not required."""
+    print("--- test_raw_prompt_defaults_to_null_when_not_passed ---")
+    audit_logger.log_scan(
+        username="bob", platform="ChatGPT", masked_prompt="test",
+        entity_count=0, entity_types=[], eci=FAKE_ECI, risk_score=0,
+        matched_rules=[], decision="ALLOW", status="SAFE",
+        presidio_ms=1.0, eci_ms=0.0, policy_ms=0.1, total_ms=1.2,
+    )
+    row = _fetch_latest_row()
+    assert row["raw_prompt"] is None
+    print("PASS\n")
+
+
 if __name__ == "__main__":
     test_no_raw_value_reaches_the_db()
     test_defaults_to_unknown_when_identity_missing()
@@ -228,6 +267,8 @@ if __name__ == "__main__":
     test_enriched_columns_populated_when_llm_ran()
     test_enriched_columns_null_when_llm_skipped()
     test_pre_enrichment_calls_still_work()
+    test_raw_prompt_is_always_stored()
+    test_raw_prompt_defaults_to_null_when_not_passed()
     print("=" * 60)
     print("All audit_logger tests passed.")
     print(f"(test DB at {_TEST_DB_PATH} - safe to delete)")

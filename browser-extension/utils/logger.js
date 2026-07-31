@@ -1,9 +1,9 @@
-﻿const PREFIX = "[Prompt Guardian]";
+﻿const PREFIX = "[PromptShield]";
 
 /**
- * Lightweight logger with a consistent Prompt Guardian prefix.
+ * Lightweight logger with a consistent PromptShield prefix.
  */
-class PromptGuardianLogger {
+class PromptShieldLogger {
   /**
    * Writes an informational message.
    *
@@ -32,5 +32,5 @@ class PromptGuardianLogger {
   }
 }
 
-export const Logger = new PromptGuardianLogger();
+export const Logger = new PromptShieldLogger();
 export default Logger;

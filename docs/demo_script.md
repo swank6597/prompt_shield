@@ -22,7 +22,7 @@ is the source of truth if behavior ever seems to drift from this script.
 4. Load the extension: `chrome://extensions` → Developer mode → Load unpacked →
    select `browser-extension/`.
 5. Open a supported site (ChatGPT, Gemini, Claude, DeepSeek, or Copilot) and open
-   DevTools console to show the `[Prompt Guardian]` logs live if useful.
+   DevTools console to show the `[PromptShield]` logs live if useful.
 
 ## Script
 

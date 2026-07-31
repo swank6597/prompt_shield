@@ -19,10 +19,10 @@
 
   const { Logger } = loggerModule;
   const { findSiteDefinition } = siteDefinitionsModule;
-  const { createPromptGuardianDetector } = detectorModule;
+  const { createPromptShieldDetector } = detectorModule;
   const { createPromptScanClient } = apiClientModule;
   const { createReviewDialog } = modalModule;
-  const { createPromptGuardianObserver } = observerModule;
+  const { createPromptShieldObserver } = observerModule;
   const { resolveIdentity } = identityModule;
 
   Logger.info("Extension Loaded");
@@ -35,16 +35,30 @@
 
   Logger.info(`${site.label} Detected`);
 
-  // Resolved once at load: DOM auto-detection first, manual popup-
-  // configured fallback second - see content/identity.js.
-  const username = await resolveIdentity(document, site);
-
-  const detector = createPromptGuardianDetector(site);
+  const detector = createPromptShieldDetector(site);
   const scanClient = createPromptScanClient({
     Logger,
     endpoint: site.apiEndpoint,
-    username,
+    username: null,
     platform: site.label
+  });
+
+  // Resolved in the background rather than awaited here: DOM
+  // auto-detection retries a few times (see content/identity.js) since
+  // some sites - ChatGPT included - render their profile UI client-side,
+  // after this script has already run. Awaiting that up front would delay
+  // send-interception setup below by up to ~2s for no benefit; instead
+  // scanClient starts with no username and picks up the resolved value
+  // (auto-detected, or the popup's manual fallback) as soon as it's ready.
+  // A prompt sent before it resolves is still scanned/blocked correctly -
+  // it just logs as "unknown" until then.
+  void resolveIdentity(document, site).then((resolvedUsername) => {
+    if (resolvedUsername) {
+      Logger.info(`Audit identity resolved: ${resolvedUsername}`);
+      scanClient.setUsername(resolvedUsername);
+    } else {
+      Logger.info("Audit identity not resolved (no DOM match, no manual fallback saved) - will log as \"unknown\"");
+    }
   });
 
   let observer = null;
@@ -63,7 +77,7 @@
     }
   });
 
-  observer = createPromptGuardianObserver({
+  observer = createPromptShieldObserver({
     Logger,
     detector,
     scanClient,

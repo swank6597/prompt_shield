@@ -1,0 +1,586 @@
+/* PromptShield Dashboard
+   Palette lifted directly from browser-extension/popup/popup.css and
+   content/modal.js so the dashboard reads as the same product, not a
+   separate tool. Dark-only, matching the extension (no light mode exists
+   there to match against). */
+
+:root {
+  color-scheme: dark;
+  --bg: #0f172a;
+  --bg-soft: #111827;
+  --surface: rgba(15, 23, 42, 0.55);
+  --surface-solid: #131c31;
+  --text: #e2e8f0;
+  --text-secondary: #cbd5e1;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --accent-ink: #0f172a;
+  --accent-soft: rgba(56, 189, 248, 0.14);
+  --border: rgba(148, 163, 184, 0.18);
+
+  /* Status ramp (good -> warning -> serious -> critical), matching the
+     extension's review-modal status colors (green/amber/red), extended
+     with one new "serious" step (orange) for MASK - see
+     backend/dashboard/README.md for the mapping. */
+  --status-good-bg: rgba(34, 197, 94, 0.16);
+  --status-good-text: #86efac;
+  --status-good-fill: #22c55e;
+  --status-warning-bg: rgba(251, 191, 36, 0.16);
+  --status-warning-text: #fcd34d;
+  --status-warning-fill: #fbbf24;
+  --status-serious-bg: rgba(251, 146, 60, 0.16);
+  --status-serious-text: #fdba74;
+  --status-serious-fill: #fb923c;
+  --status-critical-bg: rgba(248, 113, 113, 0.18);
+  --status-critical-text: #fca5a5;
+  --status-critical-fill: #f87171;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Author-stylesheet rules that set `display` on an element (e.g.
+   .login-screen's `display: flex` below) otherwise beat the browser's
+   built-in `[hidden] { display: none }` rule, since author CSS always
+   outranks user-agent CSS regardless of specificity - the element would
+   stay visible even with the `hidden` attribute set. This restores the
+   expected behavior globally for every element toggled via `.hidden` in
+   app.js. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 42%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-soft) 100%);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ==================== Login screen ==================== */
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 28px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(248, 250, 252, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.login-card h1 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+.login-card .description {
+  margin: 0 0 20px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 0.85rem;
+}
+
+.field span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.5);
+  color: var(--text);
+  font: inherit;
+}
+
+.field input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.login-error {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--status-critical-bg);
+  color: var(--status-critical-text);
+  font-size: 0.82rem;
+}
+
+/* ==================== Buttons / inputs ==================== */
+
+.btn-primary {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-ghost {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.select,
+.text-input {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.5);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.select:focus,
+.text-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ==================== App shell ==================== */
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.topbar-title {
+  min-width: 0;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.whoami {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ==================== Stat tiles ==================== */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-tile {
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(248, 250, 252, 0.04);
+  backdrop-filter: blur(8px);
+}
+
+.stat-label {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.stat-value {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+}
+
+.stat-critical { color: var(--status-critical-text); }
+.stat-warning { color: var(--status-warning-text); }
+.stat-good { color: var(--status-good-text); }
+
+/* ==================== Chart panels ==================== */
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 900px) {
+  .chart-grid { grid-template-columns: 1fr; }
+}
+
+.panel {
+  padding: 18px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(248, 250, 252, 0.03);
+  backdrop-filter: blur(8px);
+}
+
+.panel h2 {
+  margin: 0 0 14px;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+/* Stacked daily bar chart - CSS only, no chart library. Each day is a
+   column; each column stacks up to 4 status-colored segments with a 2px
+   surface gap between them (surface-gap spec). */
+.chart-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 160px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-day {
+  flex: 1;
+  min-width: 6px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  height: 100%;
+  justify-content: flex-start;
+}
+
+.chart-day:hover {
+  outline: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.chart-segment {
+  width: 100%;
+  border-radius: 3px;
+  min-height: 0;
+}
+
+.chart-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 20px 0;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* Single-hue horizontal bar list (layer / provider breakdowns) - each row
+   is already identified by its own label, so every bar shares one accent
+   color rather than a per-category palette (see color-formula.md: never
+   color nominal bars by the value the label already shows). */
+.bar-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 1fr 3fr auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.82rem;
+}
+
+.bar-row:last-child {
+  margin-bottom: 0;
+}
+
+.bar-row-label {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bar-track {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.12);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: var(--accent);
+}
+
+.bar-row-value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+}
+
+/* ==================== Events table ==================== */
+
+.table-panel {
+  padding-bottom: 8px;
+}
+
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.table-toolbar h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.text-input {
+  min-width: 220px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.events-table thead th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.events-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.events-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.events-table tbody tr:hover {
+  background: rgba(248, 250, 252, 0.03);
+}
+
+.prompt-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.78rem;
+}
+
+.row-detail-wide {
+  grid-column: 1 / -1;
+}
+
+.row-detail-wide dd {
+  font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+/* Raw prompt block - visually flagged as the more sensitive of the two
+   prompt fields shown, even though the whole page already requires the
+   admin role to reach. */
+.row-detail-danger {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.row-detail-danger dt {
+  color: var(--status-critical-text);
+}
+
+.row-expand-btn {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+  width: 18px;
+}
+
+/* .events-table prefix (not just .row-detail td) needed so this actually
+   beats ".events-table tbody td { white-space: nowrap }" above - that
+   selector has higher specificity (class + 2 elements vs. class + 1
+   element), so a bare ".row-detail td" rule here is silently ignored
+   regardless of source order, and long Reason/Matched-rules/Entity-types
+   text overflows its grid cell on top of its neighbors instead of
+   wrapping. */
+.events-table .row-detail td {
+  white-space: normal;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.row-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 20px;
+  font-size: 0.8rem;
+}
+
+.row-detail-grid dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.row-detail-grid dd {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-ALLOW { background: var(--status-good-bg); color: var(--status-good-text); }
+.status-WARN { background: var(--status-warning-bg); color: var(--status-warning-text); }
+.status-MASK { background: var(--status-serious-bg); color: var(--status-serious-text); }
+.status-BLOCK { background: var(--status-critical-bg); color: var(--status-critical-text); }
+
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px 0 6px;
+}

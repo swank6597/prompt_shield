@@ -1,6 +1,6 @@
 # PromptShield Detection API
 
-FastAPI backend for Prompt Guardian. It scans user prompts for sensitive data using a multi-layered detection pipeline: Microsoft Presidio (PII), Enterprise Context Intelligence (semantic classification via LLM), and a Policy/Risk Engine that produces the final ALLOW/WARN/MASK/BLOCK decision.
+FastAPI backend for PromptShield. It scans user prompts for sensitive data using a multi-layered detection pipeline: Microsoft Presidio (PII), Enterprise Context Intelligence (semantic classification via LLM), and a Policy/Risk Engine that produces the final ALLOW/WARN/MASK/BLOCK decision.
 
 ## Overview
 
@@ -287,9 +287,18 @@ See [`specs/authentication/`](../specs/authentication/) for the full design. Sum
 - **Config:** `PROMPTSHIELD_AUTH_SECRET_KEY` is required (no safe default - the
   backend refuses to start without it); see `.env.example` for the full list of
   `PROMPTSHIELD_AUTH_*` settings.
-- These three route groups are mounted as separate sub-apps in `app.py` so
-  `/auth/*`/`/devices/*` can have a different (non-wildcard) CORS policy than
-  `/api/scan` - each has its own `/docs` (e.g. `/auth/docs`, `/devices/docs`).
+- These route groups are mounted as separate sub-apps in `app.py` so
+  `/auth/*`/`/devices/*`/`/dashboard/*` can have a different (non-wildcard) CORS
+  policy than `/api/scan` - each has its own `/docs` (e.g. `/auth/docs`,
+  `/devices/docs`).
+
+## Dashboard
+
+Visual, read-only view over the audit trail - `http://localhost:8081/dashboard/`.
+Signs in with the same accounts as above (any role, `admin` or `viewer`). See
+[`dashboard/README.md`](dashboard/README.md) for the module layout, API, and a note
+on where the styling came from (matched to `browser-extension/`'s existing dark
+theme, not a generic palette).
 
 ## Project Structure
 
@@ -328,7 +337,15 @@ backend/
 │   ├── policy_engine.py
 │   ├── risk_engine.py
 │   └── rules.json             # Configurable policy rules
-└── utils/                     # Logger, helpers (includes is_trivial_prompt())
+├── audit/                     # Audit trail - see audit/README.md
+│   ├── audit_logger.py        # log_scan() - the only writer to scan_audit_log
+│   └── audit_log.db           # SQLite (git-ignored, created on first run)
+├── auth/                      # Device/user authentication - see specs/authentication/
+├── dashboard/                 # Visual audit-trail UI - see dashboard/README.md
+│   ├── queries.py             # Read-only queries over scan_audit_log
+│   ├── routes.py              # GET /api/stats, GET /api/events
+│   └── static/                # index.html + style.css + app.js (no build step)
+└── utils/                     # Logger, helpers
 ```
 
 Note: a dedicated `regex/` pattern-matching layer is planned but not yet created — Presidio's built-in + custom recognizers currently cover that ground (see Known Limitations).

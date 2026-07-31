@@ -226,7 +226,7 @@ function scoreSendCandidate(element, hints) {
  *   getSiteLabel: () => string
  * }}
  */
-export function createPromptGuardianDetector(site) {
+export function createPromptShieldDetector(site) {
   /**
    * Finds the most likely prompt element.
    *

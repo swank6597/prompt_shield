@@ -198,20 +198,26 @@ def scan_prompt(request: ScanRequest, device: auth_service.Device = Depends(requ
         total_ms, presidio_ms, pre_ms, eci_ms, policy_ms,
     )
 
-    # Audit trail: masked_prompt only (never request.prompt), entity_types
-    # only (never entities[].value, the raw matched value used in the
-    # `issues` list above). log_scan() never raises - a DB failure logs a
-    # warning and is swallowed, never affecting this response. Carries both
-    # the authenticated device identity (device_id/owner_user_id, from
-    # require_api_key above) and the best-effort display identity
-    # (username/platform, from the extension) - see
-    # specs/audit-dashboard-consolidation/design.md's "Dual identity".
+    # Audit trail: both masked_prompt and the raw prompt are persisted -
+    # this is an enterprise audit/compliance product, retaining the raw
+    # prompt is a deliberate requirement, not an oversight (see
+    # backend/audit/README.md). entity_types only (never entities[].value,
+    # the raw matched value used in the `issues` list above). log_scan()
+    # never raises - a DB failure logs a warning and is swallowed, never
+    # affecting this response. Carries both the authenticated device
+    # identity (device_id/owner_user_id, from require_api_key above) and
+    # the best-effort display identity (username/platform, from the
+    # extension) - see specs/audit-dashboard-consolidation/design.md's
+    # "Dual identity". Access to all of this, raw prompt included, is
+    # controlled at the dashboard layer (admin role required) rather than
+    # by withholding it here.
     log_scan(
         device_id=device.id,
         owner_user_id=device.owner_user_id,
         username=request.username,
         platform=request.platform,
         masked_prompt=result["maskedText"],
+        raw_prompt=request.prompt,
         entity_count=result["entityCount"],
         entity_types=sorted(set(detection["entityTypes"])),
         eci=eci_raw,

@@ -22,7 +22,7 @@ const PROMPT_OBSERVER_CONFIG = {
  *
  * @param {{
  *   Logger: { info: (message: string) => void, warn: (message: string) => void, error: (message: string) => void },
- *   detector: ReturnType<typeof import("./detector.js").createPromptGuardianDetector>,
+ *   detector: ReturnType<typeof import("./detector.js").createPromptShieldDetector>,
  *   scanClient: { scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, eci?: import("./modal.js").EciResult, raw?: unknown }> },
  *   reviewDialog: { show: (payload: import("./modal.js").ReviewDialogPayload) => void, hide: () => void },
  *   documentRef: Document,
@@ -30,7 +30,7 @@ const PROMPT_OBSERVER_CONFIG = {
  * }} params
  * @returns {{ start: () => void, stop: () => void, cancelPendingSend: () => void, sendSanitizedPrompt: () => Promise<boolean>, sendOriginalPrompt: () => Promise<boolean> }}
  */
-export function createPromptGuardianObserver({ Logger, detector, scanClient, reviewDialog, documentRef, windowRef }) {
+export function createPromptShieldObserver({ Logger, detector, scanClient, reviewDialog, documentRef, windowRef }) {
   const state = {
     observer: null,
     refreshScheduled: false,

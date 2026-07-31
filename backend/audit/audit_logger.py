@@ -1,17 +1,21 @@
 # audit_logger.py
-# Audit Logger - persists a privacy-safe record of every /api/scan decision
-# to SQLite: the already-masked prompt (never the raw prompt), entity TYPES
-# only (never the raw matched values used in the live response's issues
-# list), the ECI classification, and the Policy Engine's decision. Backs the
-# dashboard (specs/audit-dashboard-consolidation/, specs/dashboard/ once
-# written) - counts by decision/day/platform, and now also by device/LLM
-# provider/pipeline path.
+# Audit Logger - persists a full compliance-grade record of every /api/scan
+# decision to SQLite: both the raw prompt and Presidio's masked version,
+# entity TYPES (never the raw matched values used in the live response's
+# issues list), the ECI classification, and the Policy Engine's decision.
+# This is an enterprise audit/logging product - retaining the raw prompt is
+# a deliberate requirement (compliance review, incident investigation,
+# legal hold), not an oversight. Access is controlled instead: the
+# dashboard (backend/dashboard/) that reads this table requires the admin
+# role for everything, not just the raw prompt.
 #
-# Known limitation - see README.md: this guarantee is bounded by Presidio's
-# recall. A detection below presidio_engine.py's MIN_SCORE is filtered out
-# BEFORE anonymization, so its raw text is still sitting in maskedText
-# verbatim; an entity type no recognizer knows how to match is invisible
-# entirely. Not something this module can fix.
+# Known limitation - see README.md: masked_prompt's own redaction guarantee
+# is bounded by Presidio's recall. A detection below presidio_engine.py's
+# MIN_SCORE is filtered out BEFORE anonymization, so its raw text is still
+# sitting in maskedText verbatim; an entity type no recognizer knows how to
+# match is invisible entirely. Not something this module can fix - and
+# moot for raw_prompt specifically, which is never redacted in the first
+# place.
 
 import json
 import os
@@ -92,6 +96,11 @@ _NEW_COLUMNS = (
     ("decision_path", "TEXT"),
     ("device_id", "INTEGER"),
     ("owner_user_id", "INTEGER"),
+    # Always populated (see module docstring) - this product retains the
+    # raw prompt for enterprise audit/compliance purposes. Access is
+    # controlled at the dashboard layer (admin role required for
+    # everything), not by withholding this column.
+    ("raw_prompt", "TEXT"),
 )
 
 
@@ -137,6 +146,7 @@ def log_scan(
     decision_path: str | None = None,
     device_id: int | None = None,
     owner_user_id: int | None = None,
+    raw_prompt: str | None = None,
 ) -> None:
     """
     Persists one scan's privacy-safe audit record. Never raises - any
@@ -154,6 +164,11 @@ def log_scan(
     display identity from the extension. Both are independent columns, not
     a fallback chain - see specs/audit-dashboard-consolidation/design.md's
     "Dual identity".
+
+    raw_prompt is always persisted alongside masked_prompt - see the
+    module docstring on why this product retains it. Access, not
+    withholding, is the control: backend/dashboard/routes.py requires the
+    admin role for the entire dashboard, not just this field.
     """
     try:
         with sqlite3.connect(AUDIT_DB_PATH) as conn:
@@ -173,8 +188,8 @@ def log_scan(
                     risk_score, matched_rules, decision, status,
                     presidio_ms, eci_ms, policy_ms, total_ms,
                     reason, llm_provider, llm_model, decision_path,
-                    device_id, owner_user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    device_id, owner_user_id, raw_prompt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
@@ -211,6 +226,7 @@ def log_scan(
                     decision_path,
                     device_id,
                     owner_user_id,
+                    raw_prompt,
                 ),
             )
             conn.commit()
@@ -256,5 +272,6 @@ if __name__ == "__main__":
         decision_path="pii_only",
         device_id=1,
         owner_user_id=None,
+        raw_prompt="My email is test@example.com",
     )
     print(f"Logged one test row to {AUDIT_DB_PATH}")

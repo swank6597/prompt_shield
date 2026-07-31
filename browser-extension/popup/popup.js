@@ -1,6 +1,11 @@
 import { Logger } from "../utils/logger.js";
 import { getStoredUsername, setStoredUsername } from "../content/identity.js";
 
+// Same backend host the scan API itself defaults to (see
+// background/background.js's DEFAULT_SCAN_ENDPOINT) - not a separate
+// config, since there is no dynamic backend-URL setting today.
+const DASHBOARD_URL = "http://localhost:8081/dashboard/";
+
 /**
  * Popup entry point.
  */
@@ -9,6 +14,13 @@ Logger.info("Popup Loaded");
 const input = document.getElementById("pg-username-input");
 const saveButton = document.getElementById("pg-username-save");
 const status = document.getElementById("pg-username-status");
+const dashboardButton = document.getElementById("pg-open-dashboard");
+
+if (dashboardButton) {
+  dashboardButton.addEventListener("click", () => {
+    chrome.tabs.create({ url: DASHBOARD_URL });
+  });
+}
 
 /**
  * Shows a brief status message under the identity form.

@@ -27,7 +27,7 @@ const DEFAULT_IDENTITY_HINTS = ["account", "profile", "signed in"];
 // to the manual value - see scoreIdentityCandidate().
 const MIN_IDENTITY_SCORE = 1;
 
-const STORAGE_KEY = "promptGuardianUsername";
+const STORAGE_KEY = "promptShieldUsername";
 
 /**
  * Scores an identity candidate and extracts its best display value.
@@ -40,6 +40,17 @@ const STORAGE_KEY = "promptGuardianUsername";
  * @param {string[]} hints
  * @returns {{ score: number, value: string | null }}
  */
+// A real account name/email/chip is short. Confirmed in practice on
+// ChatGPT: an identitySelectors match landed on a broad container (likely
+// the sidebar nav), so element.textContent pulled in unrelated nested
+// text (a conversation title, a context-menu action) instead of a small
+// profile chip - and a generic hint word ("profile") happened to appear
+// inside that unrelated text ("LinkedIn Profile Optimization"), scoring
+// high enough to look like a match. Rejecting anything this long outright
+// is a blunt but effective guard against that whole class of false
+// positive, on any site, not just the one it was observed on.
+const MAX_PLAUSIBLE_IDENTITY_LENGTH = 80;
+
 function scoreIdentityCandidate(element, hints) {
   const attributeText = [
     element.getAttribute("aria-label"),
@@ -51,7 +62,7 @@ function scoreIdentityCandidate(element, hints) {
     .replace(/\s+/g, " ")
     .trim();
 
-  if (!attributeText) {
+  if (!attributeText || attributeText.length > MAX_PLAUSIBLE_IDENTITY_LENGTH) {
     return { score: 0, value: null };
   }
 
@@ -136,18 +147,37 @@ export async function setStoredUsername(username) {
   await chrome.storage.local.set({ [STORAGE_KEY]: username.trim() });
 }
 
+// Sites like ChatGPT render their profile/account button client-side,
+// after the content script has already run at document_idle - a single
+// detection attempt at load time can easily run before that UI exists yet.
+// Retrying a few times over ~2s covers that without meaningfully delaying
+// anything, since callers run this in the background rather than
+// blocking send-interception setup on it (see content.js).
+const DETECTION_RETRIES = 5;
+const DETECTION_RETRY_DELAY_MS = 400;
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Resolves the best available identity for the audit log: DOM
- * auto-detection first, manual popup-configured fallback second.
+ * auto-detection first (retried a few times, in case the site's profile
+ * UI hasn't rendered yet), manual popup-configured fallback second.
  *
  * @param {Document | Element | ShadowRoot} root
  * @param {{ identitySelectors?: string[], identityHints?: string[] }} site
  * @returns {Promise<string | null>}
  */
 export async function resolveIdentity(root, site) {
-  const detected = detectAccountIdentity(root, site);
-  if (detected) {
-    return detected;
+  for (let attempt = 0; attempt <= DETECTION_RETRIES; attempt++) {
+    const detected = detectAccountIdentity(root, site);
+    if (detected) {
+      return detected;
+    }
+    if (attempt < DETECTION_RETRIES) {
+      await delay(DETECTION_RETRY_DELAY_MS);
+    }
   }
 
   return getStoredUsername();

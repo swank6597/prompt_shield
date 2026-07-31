@@ -3,12 +3,17 @@
 # routes.py. Merged from the POC's api.py (FastAPI() app metadata).
 # Run with: uvicorn app:app --reload
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 import config
 from routes import router
 from auth.routes import auth_router, device_router
+from dashboard.routes import router as dashboard_router
 
 # ---------------------------------------------------------------------------
 # CORS: the scan API and the auth/device-management API are different trust
@@ -62,6 +67,29 @@ devices_app.add_middleware(
 )
 devices_app.include_router(device_router)
 
+# /dashboard/* - the dashboard UI (static/) and its read-only JSON API
+# (dashboard/routes.py). Same restrictive CORS policy as /auth/* and
+# /devices/* - it reads the audit trail, a more sensitive surface than the
+# scan API. The static shell (index.html, style.css, app.js) is served
+# unauthenticated - it's just the login form + JS until a token exists -
+# the actual data endpoints (/dashboard/api/*) require a valid session via
+# Depends(get_current_user) in dashboard/routes.py.
+_DASHBOARD_STATIC_DIR = os.path.join(os.path.dirname(__file__), "dashboard", "static")
+dashboard_app = FastAPI()
+dashboard_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=config.AUTH_ALLOWED_ORIGINS,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+dashboard_app.include_router(dashboard_router)
+dashboard_app.mount("/static", StaticFiles(directory=_DASHBOARD_STATIC_DIR), name="dashboard-static")
+
+
+@dashboard_app.get("/")
+def dashboard_index():
+    return FileResponse(os.path.join(_DASHBOARD_STATIC_DIR, "index.html"))
+
 # docs_url/redoc_url/openapi_url=None: FastAPI adds its own /docs, /redoc,
 # /openapi.json routes to every app instance at construction time - those
 # would be registered on `app` itself BEFORE the mounts below and would
@@ -74,4 +102,5 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 app.mount("/auth", auth_app)
 app.mount("/devices", devices_app)
+app.mount("/dashboard", dashboard_app)
 app.mount("/", scan_app)  # must be last: "/" matches every path

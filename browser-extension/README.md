@@ -1,10 +1,10 @@
-﻿# Prompt Guardian
+﻿# PromptShield
 
-Prompt Guardian is a Chrome Extension built with Manifest V3. It detects supported AI chat pages, intercepts prompt sends, scans them through a local API, and shows a review popup before anything is sent to the AI service.
+PromptShield is a Chrome Extension built with Manifest V3. It detects supported AI chat pages, intercepts prompt sends, scans them through a local API, and shows a review popup before anything is sent to the AI service.
 
 ## Project Overview
 
-The extension detects supported AI chat pages, finds the active prompt composer, intercepts send actions, scans the prompt through the local API, and opens a Prompt Guardian review popup when sensitive data is found. The user can then decide whether to send the sanitized prompt, send the original anyway, or cancel.
+The extension detects supported AI chat pages, finds the active prompt composer, intercepts send actions, scans the prompt through the local API, and opens a PromptShield review popup when sensitive data is found. The user can then decide whether to send the sanitized prompt, send the original anyway, or cancel.
 
 ## Supported Sites
 
@@ -55,11 +55,11 @@ Backend details: [`../backend/README.md`](../backend/README.md)
 ### 3. Test the review popup
 
 1. Open a supported AI chat site.
-2. Open DevTools console to see `[Prompt Guardian]` logs.
+2. Open DevTools console to see `[PromptShield]` logs.
 3. Type a prompt with test sensitive data, for example:
    `My email is john.doe@example.com`
 4. Press Enter or click Send.
-5. Prompt Guardian should open a popup showing:
+5. PromptShield should open a popup showing:
    - Detected issues
    - Your original prompt
    - The sanitized prompt
@@ -78,14 +78,14 @@ Backend details: [`../backend/README.md`](../backend/README.md)
 - User choice to send sanitized prompt, send original anyway (for `SANITIZE` results), or cancel
 - SAFE / SANITIZE / BLOCK response handling — a real `BLOCK` hides the "Send Original" option entirely, so it cannot be overridden
 - A separate, static toolbar popup (`popup/popup.html`) showing a feature summary — distinct from the in-page review modal described below; it has no interactivity beyond loading
-- Shared logger utility with consistent `[Prompt Guardian]` output
+- Shared logger utility with consistent `[PromptShield]` output
 
 ## Review Popup Flow
 
 When sensitive data is detected:
 
 1. The original send is blocked.
-2. Prompt Guardian opens a review modal on the page (injected via `content/modal.js`, not the toolbar popup).
+2. PromptShield opens a review modal on the page (injected via `content/modal.js`, not the toolbar popup).
 3. The modal shows:
    - Scan status (`SANITIZE` or `BLOCK`)
    - A summary reason
@@ -103,7 +103,7 @@ When no sensitive data is found (`SAFE`), the prompt is sent automatically witho
 ## API Contract
 
 The content script (`content/api-client.js`) never calls `fetch` itself — it
-sends a `PROMPT_GUARDIAN_SCAN_PROMPT` message via `chrome.runtime.sendMessage`
+sends a `PROMPTSHIELD_SCAN_PROMPT` message via `chrome.runtime.sendMessage`
 to the background service worker (`background/background.js`), which performs
 the actual request and returns the (normalized) response. Functionally this
 still amounts to:

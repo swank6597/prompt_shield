@@ -1,31 +1,42 @@
 # Audit Logger
 
-Persists a privacy-safe record of every `/api/scan` decision to SQLite, so
-there's a queryable trail for compliance review and the future dashboard
-(counts by decision/day/platform). No AI, no decision-making here — this is
-a pure write-path that runs *after* the Policy Engine has already decided.
+Persists a full compliance-grade record of every `/api/scan` decision to
+SQLite — including the raw prompt — so there's a queryable trail for
+compliance review, incident investigation, and the dashboard (counts by
+decision/day/platform). No AI, no decision-making here — this is a pure
+write-path that runs *after* the Policy Engine has already decided.
 
-## The one rule this module exists to enforce
+This is built as an **enterprise audit/logging product**: retaining the raw
+prompt alongside the masked one is a deliberate requirement, not an
+oversight. Access is the control, not redaction — see "Raw prompt storage"
+below and `backend/dashboard/README.md` for how that access is restricted.
 
-**Never store the raw prompt, and never store a raw matched value.**
+## What this module still redacts, and what it doesn't
 
-- `masked_prompt` is Presidio's already-anonymized output (`result[
-  "maskedText"]`) — never `request.prompt`.
-- `entity_types` is a JSON array of type strings only (e.g.
-  `["EMAIL_ADDRESS", "GITHUB_TOKEN"]`) — never `entities[].value`, the raw
-  matched value the live `/api/scan` response's `issues` list uses for the
-  extension popup's "Detected Issues" display. That list is intentionally
-  scoped to the ephemeral HTTP response the popup shows once; it never
-  reaches this module.
+**`entity_types` is a JSON array of type strings only** (e.g.
+`["EMAIL_ADDRESS", "GITHUB_TOKEN"]`) — never `entities[].value`, the raw
+matched value the live `/api/scan` response's `issues` list uses for the
+extension popup's "Detected Issues" display. That list is intentionally
+scoped to the ephemeral HTTP response the popup shows once; it never reaches
+this module. This guarantee is unconditional (there is no flag that changes
+it) — a per-entity raw value is a different, more granular thing than the
+whole raw prompt, and isn't needed for this product's audit/compliance use
+case the way the full prompt is.
 
-`routes.py`'s existing `detection = {"entityCount": ..., "entityTypes":
-[...]}` construction already discards values this same way for
-`policy_engine.decide()` — this module just extends that same discipline to
-persistence.
+`masked_prompt` (Presidio's anonymized output) is stored *alongside*
+`raw_prompt`, not instead of it — useful on its own for anything that only
+needs to confirm *what kind* of sensitive data was present without needing
+the verbatim text.
 
-## Known limitation — read before treating this as an absolute guarantee
+## Known limitation in `masked_prompt` specifically
 
-This guarantee is bounded by **Presidio's recall**, not perfect:
+Now that `raw_prompt` is always stored too, this matters less than it used to
+(there's no longer a gap between what's "supposed to be redacted" and what's
+actually in the table - the raw text is in there regardless). Documented
+anyway, since `masked_prompt` still has its own accuracy expectations for
+anything that reads it specifically instead of `raw_prompt`:
+
+`masked_prompt`'s redaction is bounded by **Presidio's recall**, not perfect:
 
 1. `presidio/presidio_engine.py`'s `MIN_SCORE = 0.85` filter drops any
    detection below that score *before* anonymization runs — a low-confidence
@@ -72,6 +83,7 @@ Single table, `scan_audit_log`, in a SQLite file at `AUDIT_DB_PATH`
 | `llm_provider`, `llm_model` | Which Smart LLM Router provider/model actually served the request (`local`/`groq`/`gemini`/`bedrock` + its configured model) — `NULL` when the pre-classifier skipped the LLM entirely |
 | `decision_path` | The pre-classifier's routing label (`trivial`, `hard_block`, `pii_only`, `enterprise_detected`, `true_ambiguity`, etc. — see `ai/pre_classifier.py`) |
 | `device_id`, `owner_user_id` | The **authenticated** identity from `backend/auth/` (`require_api_key`) — see "Dual identity" below |
+| `raw_prompt` | The unmasked prompt, always stored — see "Raw prompt storage" below |
 
 Indexed on `timestamp`, `decision`, `platform` — the three dimensions a
 dashboard aggregates by (counts by day/decision/platform). No index yet on
@@ -119,6 +131,25 @@ etc. — `site.label` in `browser-extension/content/site-definitions.js`).
 already visible on the page (no simulated clicks), falling back to a value
 the user enters once in the extension popup if detection finds nothing. See
 `browser-extension/content/identity.js`.
+
+## Raw prompt storage
+
+`raw_prompt` is always populated - `routes.py` passes `raw_prompt=request.prompt`
+on every call, and `log_scan()` persists it unconditionally, no config flag
+involved. This is a deliberate product decision: retaining the verbatim prompt
+is a real requirement for enterprise audit/compliance use (proving what was
+actually said, incident investigation, legal hold), not a default that happened
+to be left too permissive.
+
+**Because of that, access control is where this actually gets protected, not
+storage.** Any PII/secret Presidio would have masked is sitting in plaintext in
+this column - a DB breach exposes it directly. The mitigation is
+`backend/dashboard/routes.py` requiring the `admin` role for the *entire*
+dashboard (not just this one field) - there is currently no reduced-visibility
+account type that can read `scan_audit_log` at all. Treat `audit_log.db` itself
+with the same handling you'd give any datastore holding real customer PII/
+secrets (backups, access logs, encryption at rest, retention policy) - none of
+that is implemented in this module itself.
 
 ## Fail-safe contract
 

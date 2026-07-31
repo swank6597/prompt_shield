@@ -25,7 +25,7 @@ see [`backend/README.md`](../backend/README.md).
 
 ### Browser extension (`browser-extension/`)
 
-Manifest V3 extension ("Prompt Guardian"). Runs on ChatGPT, Gemini, Claude, DeepSeek,
+Manifest V3 extension ("PromptShield"). Runs on ChatGPT, Gemini, Claude, DeepSeek,
 and Copilot/Bing Chat (see [`browser-extension/README.md`](../browser-extension/README.md)
 for the exact domain list). Responsibilities:
 

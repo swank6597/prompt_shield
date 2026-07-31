@@ -1,6 +1,6 @@
 ﻿{
   "manifest_version": 3,
-  "name": "Prompt Guardian",
+  "name": "PromptShield",
   "description": "Observe supported AI chat prompts before sending them.",
   "version": "3.0.0",
   "permissions": ["storage"],

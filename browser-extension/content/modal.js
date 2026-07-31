@@ -1,4 +1,4 @@
-﻿const MODAL_HOST_ID = "prompt-guardian-review-host";
+﻿const MODAL_HOST_ID = "promptshield-review-host";
 
 import { resolveScanIssues } from "../utils/scan-utils.js";
 
@@ -372,7 +372,7 @@ export function createReviewDialog(handlers) {
       </style>
       <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="pg-review-title">
         <div class="card">
-          <p class="eyebrow">Prompt Guardian</p>
+          <p class="eyebrow">PromptShield</p>
           <h2 id="pg-review-title">Review Prompt Before Sending</h2>
           <p class="summary" id="pg-review-summary"></p>
           <div id="pg-review-status"></div>

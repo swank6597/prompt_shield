@@ -76,7 +76,7 @@ Notes:
 
 ### 3. Test on a supported AI chat site
 
-Open ChatGPT, Gemini, Claude, DeepSeek, or Microsoft Copilot, then send a prompt containing test data such as an email address or phone number. Prompt Guardian should intercept the send and open the review popup.
+Open ChatGPT, Gemini, Claude, DeepSeek, or Microsoft Copilot, then send a prompt containing test data such as an email address or phone number. PromptShield should intercept the send and open the review popup.
 
 ## Current Focus
 
