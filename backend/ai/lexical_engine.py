@@ -2,7 +2,7 @@
 # TF-IDF scoring engine with inverted index for fast deterministic
 # prompt scoring against the enterprise knowledge base. Replaces the
 # naive token-overlap approach in keyword_search.py with proper term
-# weighting and high-frequency dampening (no manual stopword list).
+# weighting, high-frequency dampening, and stopword filtering.
 
 import math
 import os
@@ -19,6 +19,12 @@ from utils.logger import get_logger  # noqa: E402
 import config  # noqa: E402
 
 log = get_logger("lexical_engine")
+
+try:
+    from spacy.lang.en.stop_words import STOP_WORDS as _STOPWORDS
+except Exception as _exc:  # pragma: no cover - spaCy is a hard dep in practice
+    log.warning("spaCy stopword list unavailable (%s); falling back to empty stopword set", _exc)
+    _STOPWORDS = frozenset()
 
 
 @dataclass
@@ -71,12 +77,14 @@ class LexicalEngine:
         Tokenize text into lowercase alphanumeric tokens.
 
         Uses regex [a-zA-Z][a-zA-Z0-9_-]+ to extract tokens, converts
-        to lowercase, and filters out tokens with length <= 2.
-        No stopword list — high-frequency suppression is handled by
-        IDF dampening.
+        to lowercase, filters out tokens with length <= 2, and drops
+        common English stopwords (spaCy's list). Stopwords were
+        previously left to IDF dampening alone, but on a small corpus
+        a stopword can still appear in few enough docs to get a high
+        IDF weight and register as a "matched enterprise term".
         """
         words = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]+", text.lower())
-        return [w for w in words if len(w) > 2]
+        return [w for w in words if len(w) > 2 and w not in _STOPWORDS]
 
     def _build_index(self, documents: list[dict]) -> None:
         """
