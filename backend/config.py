@@ -43,13 +43,26 @@ LLM_AUTO_ENTITY_THRESHOLD = int(os.environ.get("PROMPTSHIELD_LLM_AUTO_ENTITY_THR
 
 # --- Fallback behavior ---
 LLM_FALLBACK_TO_LOCAL = os.environ.get("PROMPTSHIELD_LLM_FALLBACK_TO_LOCAL", "true").lower() == "true"
+# Mirror of the above: if local Ollama fails (unreachable, timeout, bad
+# output), fall back to the configured cloud provider instead of giving up.
+# Local is still given its full configured chance first (OLLAMA_TIMEOUT_SECONDS
+# + OLLAMA_MAX_RETRIES below) - this only kicks in once local has actually
+# exhausted that budget and failed, not as a way to cut its chance short.
+LLM_FALLBACK_TO_CLOUD = os.environ.get("PROMPTSHIELD_LLM_FALLBACK_TO_CLOUD", "true").lower() == "true"
 
 # =============================================================================
 # --- Ollama / local LLM settings ---
 # =============================================================================
 OLLAMA_HOST = os.environ.get("PROMPTSHIELD_OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("PROMPTSHIELD_OLLAMA_MODEL", "phi3:mini")
-OLLAMA_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_OLLAMA_TIMEOUT", "180"))
+# 20s, not 180s: deliberate dev-phase choice, not a "give local its best shot"
+# value. There's no warm-up call anywhere in the running app (only in test
+# scripts), and phi3:mini on modest CPU hardware has been directly measured
+# taking 30-180s+ even so - at any timeout in that range, local essentially
+# never succeeds anyway, so a long timeout only adds latency before the
+# LLM_FALLBACK_TO_CLOUD path (llm_router.py) kicks in, with no upside.
+# Revisit this once real local-inference infra exists post-hackathon.
+OLLAMA_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_OLLAMA_TIMEOUT", "20"))
 OLLAMA_MAX_RETRIES = int(os.environ.get("PROMPTSHIELD_OLLAMA_MAX_RETRIES", "1"))
 
 # =============================================================================

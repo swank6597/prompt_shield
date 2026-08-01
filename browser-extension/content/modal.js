@@ -130,9 +130,15 @@ export function createReviewDialog(handlers) {
       eci.reasoning.some((entry) => /fallback/i.test(String(entry)));
 
     if (isFallback) {
-      return `<p class="empty-state">AI context analysis unavailable (${escapeHtml(
-        eci.reasoning?.[0] ?? "classifier fallback"
-      )}).</p>`;
+      // Defense in depth: the backend already caps fallback reasoning text
+      // (see semantic_classifier.py's _truncate_reason()), but this popup
+      // shouldn't depend on every backend caller getting that right - cap
+      // here too so a long message (e.g. a raw exception string) never
+      // balloons this small notice into a wall of text.
+      const rawReason = eci.reasoning?.[0] ?? "classifier fallback";
+      const reason =
+        rawReason.length > 200 ? `${rawReason.slice(0, 200).trimEnd()}...` : rawReason;
+      return `<p class="empty-state">AI context analysis unavailable (${escapeHtml(reason)}).</p>`;
     }
 
     const activeFlags = ECI_FLAGS.filter(([key]) => eci[key]).map(([, label]) => label);

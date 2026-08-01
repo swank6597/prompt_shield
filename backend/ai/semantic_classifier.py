@@ -43,12 +43,30 @@ with open(SCHEMA_PATH, "r", encoding="utf-8") as _f:
 MAX_PARSE_RETRIES = 1  # one retry on top of the first attempt, same prompt
 
 
-def _fallback_result(reason: str) -> dict:
+# Fixed, complete sentences only - never raw/dynamic exception text. A
+# truncated exception dump ("...Additional properties are not allowed
+# ('categ... [truncated]") isn't a "logical" message, it's just a shorter
+# garbled one - the actual fix is to never embed unbounded dynamic text
+# in the user-facing reasoning at all. The real exception detail (which
+# provider, which validation error) still goes to the server logs via the
+# log.error()/log.warning() calls at each call site below - just not into
+# what the browser extension's review popup displays.
+_FALLBACK_MESSAGES = {
+    "no_provider": "No configured AI provider could be reached to classify this prompt.",
+    "all_providers_failed": "All configured AI providers failed to respond to this prompt.",
+    "invalid_output": "The AI model's response could not be validated after retrying.",
+}
+
+
+def _fallback_result(category: str) -> dict:
     """
     Fail-closed default. Used when Ollama is down or its output can't be
     trusted. requiresEnterpriseKnowledge=True + confidence=0.0 signals
     "could not classify - treat with caution" to the Policy Engine,
     rather than defaulting to a false "this looks fine".
+
+    `category` must be a key in _FALLBACK_MESSAGES - see its comment for
+    why this takes a fixed category rather than a free-text reason.
 
     Known limitation (confirmed via live smoke test after the 4 impactsX
     compliance fields were added, growing the schema from 10 to 14
@@ -79,7 +97,10 @@ def _fallback_result(reason: str) -> dict:
         "impactsHIPAA": False,
         "impactsISO27001": False,
         "confidence": 0.0,
-        "reasoning": [f"ECI fallback triggered: {reason}"],
+        "reasoning": [
+            f"ECI fallback triggered: {_FALLBACK_MESSAGES.get(category, 'AI classification failed due to an unexpected error.')} "
+            "Treating this prompt with caution."
+        ],
     }
 
 
@@ -121,6 +142,19 @@ def _parse_and_validate(raw_text: str) -> dict:
     return parsed
 
 
+def _short_error_message(e: Exception) -> str:
+    """
+    jsonschema.ValidationError's str() embeds the entire failed sub-schema
+    (every property/required field it was checking against), not just the
+    human-readable complaint - `.message` is the short version ("Additional
+    properties are not allowed ('category', 'type' were unexpected)").
+    json.JSONDecodeError has no `.message` distinct from str(), so it falls
+    through to the second branch, which is already short (e.g. "Expecting
+    value: line 1 column 1 (char 0)").
+    """
+    return e.message if isinstance(e, ValidationError) else str(e)
+
+
 def classify(masked_text: str, entity_count: int = 0, semantic_chunks: list[dict] | None = None) -> dict:
     """
     Runs the full ECI pipeline on already-masked text (output of the
@@ -141,7 +175,7 @@ def classify(masked_text: str, entity_count: int = 0, semantic_chunks: list[dict
     """
     if not is_any_provider_available():
         log.warning("No LLM provider available - returning fail-closed fallback")
-        return _fallback_result("No LLM provider reachable")
+        return _fallback_result("no_provider")
 
     retrieved_docs = search(masked_text)
     if retrieved_docs:
@@ -163,7 +197,7 @@ def classify(masked_text: str, entity_count: int = 0, semantic_chunks: list[dict
             raw, provider_used = route_llm_call(built["system"], built["user"], context=router_context)
         except LLMRouterError as e:
             log.error("LLM Router failed: %s - returning fail-closed fallback", e)
-            return _fallback_result(f"LLM Router failed: {e}")
+            return _fallback_result("all_providers_failed")
 
         # Log raw LLM output at DEBUG level so we can diagnose parse failures
         log.debug("Raw LLM response (attempt %d, len=%d):\n%s", attempt + 1, len(raw), raw)
@@ -179,11 +213,15 @@ def classify(masked_text: str, entity_count: int = 0, semantic_chunks: list[dict
             return parsed
         except (json.JSONDecodeError, ValidationError) as e:
             last_error = e
-            log.warning("ECI output failed validation on attempt %d: %s\nRaw output was: %s", attempt + 1, e, raw[:500])
+            log.warning(
+                "ECI output failed validation on attempt %d: %s\nRaw output was: %s",
+                attempt + 1, _short_error_message(e), raw[:500],
+            )
             continue  # retry once with the same prompt
 
-    log.error("ECI output failed validation after all retries: %s - returning fail-closed fallback", last_error)
-    return _fallback_result(f"LLM output failed validation after retries: {last_error}")
+    last_error_message = _short_error_message(last_error) if last_error else "unknown error"
+    log.error("ECI output failed validation after all retries: %s - returning fail-closed fallback", last_error_message)
+    return _fallback_result("invalid_output")
 
 
 if __name__ == "__main__":
