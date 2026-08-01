@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>PromptShield — Review Search</title>
+  <link rel="stylesheet" href="review.css">
+</head>
+<body>
+  <div class="page-container">
+    <div class="card" id="review-card">
+      <p class="eyebrow">PromptShield</p>
+      <h1 id="review-title">Review Search Before Sending</h1>
+      <p class="summary" id="review-summary"></p>
+      <div id="review-status"></div>
+
+      <div class="section" id="issues-section">
+        <p class="section-title">Detected Issues</p>
+        <div id="review-issues"></div>
+      </div>
+
+      <div class="section" id="eci-section" hidden>
+        <p class="section-title">AI Context Analysis</p>
+        <div id="review-eci"></div>
+      </div>
+
+      <div class="section" id="original-section">
+        <p class="section-title">Original Query</p>
+        <pre class="prompt-box" id="review-original"></pre>
+      </div>
+
+      <div class="section" id="sanitized-section">
+        <p class="section-title">Sanitized Query</p>
+        <pre class="prompt-box" id="review-sanitized"></pre>
+      </div>
+
+      <div class="actions" id="review-actions">
+        <button type="button" class="secondary" id="btn-cancel">Cancel</button>
+        <button type="button" class="danger" id="btn-send-original">Send Original</button>
+        <button type="button" class="primary" id="btn-send-sanitized">Send Sanitized</button>
+      </div>
+    </div>
+
+    <!-- Error state (hidden by default) -->
+    <div class="card error-card" id="error-card" hidden>
+      <p class="eyebrow">PromptShield</p>
+      <h1>Scan Data Not Found</h1>
+      <p class="summary">The scan data for this search may have expired or is no longer available.</p>
+      <div class="actions">
+        <button type="button" class="secondary" id="btn-go-back">Go Back</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="review.js"></script>
+</body>
+</html>
