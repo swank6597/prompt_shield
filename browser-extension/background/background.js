@@ -1,5 +1,8 @@
 ﻿import { Logger } from "../utils/logger.js";
 import { normalizeIssueList } from "../utils/scan-utils.js";
+import { getOrCreateApiKey, clearStoredApiKey } from "./device-auth.js";
+import { startNtpInterceptor } from "./ntp-interceptor.js";
+import { startGeminiMonitor } from "./gemini-monitor.js";
 
 const DEFAULT_SCAN_ENDPOINT = "http://localhost:8081/api/scan";
 
@@ -33,17 +36,36 @@ function normalizeScanResponse(response) {
  * @param {string} [endpoint]
  * @returns {Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, raw?: unknown }>}
  */
-async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT) {
+async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT, username, platform) {
   try {
     Logger.info("API Request Sent");
+
+    // /api/scan requires an enrolled device's API key - enroll once (see
+    // device-auth.js), cached in chrome.storage.local after that.
+    const apiKey = await getOrCreateApiKey();
 
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey
       },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt, username, platform })
     });
+
+    if (response.status === 401) {
+      // Key was revoked or is otherwise no longer valid - clear it so the
+      // *next* scan enrolls a fresh device automatically, and fail open
+      // on this one rather than blocking the user's typing over it.
+      Logger.warn("API key rejected (401) - clearing stored key, will re-enroll on next scan");
+      await clearStoredApiKey();
+      return {
+        status: "SAFE",
+        reason: "Device key was invalid; re-enrolling automatically",
+        issues: [],
+        raw: { error: "401 from /api/scan" }
+      };
+    }
 
     const contentType = response.headers.get("content-type") || "";
     const payload = contentType.includes("application/json")
@@ -68,18 +90,32 @@ async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT) {
 
 if (chrome?.runtime?.onMessage?.addListener) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (!message || message.type !== "PROMPT_GUARDIAN_SCAN_PROMPT") {
+    // Handle tab ID requests from content scripts (for anti-double-interception coordination)
+    if (message && message.type === "PROMPT_GUARDIAN_GET_TAB_ID") {
+      sendResponse({ tabId: sender.tab?.id ?? null });
+      return false;
+    }
+
+    if (!message || message.type !== "PROMPTSHIELD_SCAN_PROMPT") {
       return false;
     }
 
     void (async () => {
-      const result = await scanPrompt(String(message.prompt ?? ""), String(message.endpoint ?? DEFAULT_SCAN_ENDPOINT));
+      const result = await scanPrompt(
+        String(message.prompt ?? ""),
+        String(message.endpoint ?? DEFAULT_SCAN_ENDPOINT),
+        typeof message.username === "string" ? message.username : undefined,
+        typeof message.platform === "string" ? message.platform : undefined
+      );
       sendResponse(result);
     })();
 
     return true;
   });
 }
+
+startNtpInterceptor({ Logger, scanPrompt });
+startGeminiMonitor({ Logger, scanPrompt });
 
 Logger.info("Background Service Worker Loaded");
 

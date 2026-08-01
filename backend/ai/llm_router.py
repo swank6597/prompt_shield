@@ -19,7 +19,7 @@
 #
 # Usage:
 #   from llm_router import route_llm_call
-#   response_text = route_llm_call(system_prompt, user_prompt, context={...})
+#   response_text, provider_used = route_llm_call(system_prompt, user_prompt, context={...})
 
 import os
 import re
@@ -35,6 +35,11 @@ from config import (
     LLM_AUTO_LENGTH_THRESHOLD,
     LLM_AUTO_ENTITY_THRESHOLD,
     LLM_FALLBACK_TO_LOCAL,
+    LLM_FALLBACK_TO_CLOUD,
+    OLLAMA_MODEL,
+    GROQ_MODEL,
+    GEMINI_MODEL,
+    BEDROCK_MODEL_ID,
 )
 from utils.logger import get_logger
 
@@ -43,6 +48,16 @@ from utils.logger import get_logger
 from providers import PROVIDER_REGISTRY
 
 log = get_logger("llm_router")
+
+# Resolves a provider name to the actual model string it's configured to
+# use - lets callers (semantic_classifier.py, for the audit trail) report
+# which model served a request without duplicating config knowledge.
+PROVIDER_MODEL = {
+    "local": OLLAMA_MODEL,
+    "groq": GROQ_MODEL,
+    "gemini": GEMINI_MODEL,
+    "bedrock": BEDROCK_MODEL_ID,
+}
 
 # ---------------------------------------------------------------------------
 # Provider instances (lazy-initialized singletons)
@@ -157,7 +172,7 @@ def route_llm_call(
     system_prompt: str,
     user_prompt: str,
     context: dict | None = None,
-) -> str:
+) -> tuple[str, str]:
     """
     Routes an LLM classification call to the appropriate provider.
 
@@ -171,7 +186,12 @@ def route_llm_call(
                                (must match a name in PROVIDER_REGISTRY)
 
     Returns:
-        Raw text response from the LLM (expected to be JSON per schema.json).
+        (response_text, provider_used) - response_text is the raw text
+        response from the LLM (expected to be JSON per schema.json);
+        provider_used is whichever provider actually served the request -
+        this can differ from the initially-resolved provider if it failed
+        and fell back to local, so callers needing an audit trail should
+        use this value, not resolve_provider_name()'s independently.
 
     Raises:
         LLMRouterError: if all providers fail (including fallback).
@@ -196,7 +216,7 @@ def route_llm_call(
     # Attempt primary provider
     provider = _get_provider(provider_name)
     try:
-        return provider.call(system_prompt, user_prompt)
+        return provider.call(system_prompt, user_prompt), provider_name
     except Exception as primary_error:
         log.error("Primary provider %s failed: %s", provider_name, primary_error)
 
@@ -205,12 +225,32 @@ def route_llm_call(
             log.info("Falling back to local Ollama...")
             try:
                 fallback = _get_provider("local")
-                return fallback.call(system_prompt, user_prompt)
+                return fallback.call(system_prompt, user_prompt), "local"
             except Exception as fallback_error:
                 log.error("Fallback to local also failed: %s", fallback_error)
                 raise LLMRouterError(
                     f"All providers failed. Primary ({provider_name}): {primary_error}; "
                     f"Fallback (local): {fallback_error}"
+                ) from fallback_error
+
+        # Mirror of the above: local failed (unreachable/timeout/bad output) -
+        # fall back to the configured cloud provider instead of giving up.
+        # Local already had its full configured chance to respond before we
+        # get here - OllamaProvider's own call() already applied
+        # OLLAMA_TIMEOUT_SECONDS and retried OLLAMA_MAX_RETRIES times per
+        # ollama_client.py, so primary_error only reaches this point after
+        # that budget is genuinely exhausted. This isn't cutting local's
+        # chance short; it's what happens once local has already failed.
+        if provider_name == "local" and LLM_FALLBACK_TO_CLOUD:
+            log.info("Falling back to cloud provider %s...", LLM_CLOUD_PROVIDER)
+            try:
+                fallback = _get_provider(LLM_CLOUD_PROVIDER)
+                return fallback.call(system_prompt, user_prompt), LLM_CLOUD_PROVIDER
+            except Exception as fallback_error:
+                log.error("Fallback to %s also failed: %s", LLM_CLOUD_PROVIDER, fallback_error)
+                raise LLMRouterError(
+                    f"All providers failed. Primary (local): {primary_error}; "
+                    f"Fallback ({LLM_CLOUD_PROVIDER}): {fallback_error}"
                 ) from fallback_error
 
         raise LLMRouterError(
@@ -227,7 +267,11 @@ def is_any_provider_available() -> bool:
 
     if strategy == "local":
         provider = _get_provider("local")
-        return provider.is_available()
+        if provider.is_available():
+            return True
+        if LLM_FALLBACK_TO_CLOUD:
+            return _get_provider(LLM_CLOUD_PROVIDER).is_available()
+        return False
 
     if strategy == "cloud":
         provider = _get_provider(LLM_CLOUD_PROVIDER)

@@ -17,9 +17,11 @@ Once each piece works independently, we'll pull the working parts into the actua
 
 | Folder | Purpose | Status |
 |---|---|---|
-| `backend/` | Prompt scanning API (Presidio + `/api/scan`) | In progress |
-| `browser-extension/` | Manifest V3 extension for intercepting prompts | In progress |
-| `ollama/` | Local AI risk classification (Ollama + Phi-4-mini) | In progress |
+| `backend/` | Prompt scanning API — Presidio + a lexical/semantic pre-classifier + Smart LLM Router + Policy Engine, exposed via `/api/scan` | In progress |
+| `browser-extension/` | Manifest V3 extension for intercepting prompts on ChatGPT, Gemini, Claude, DeepSeek, and Copilot/Bing Chat | In progress |
+| `ollama/` | Research notes on local AI risk classification (Ollama + Phi models) | Research complete, folded into `backend/ai/` |
+| `knowledge/` | Fictional "NovaBank" enterprise knowledge base used to detect enterprise-context leaks | In progress |
+| `specs/` | Kiro-style spec docs (requirements/design/tasks) for larger backend features | In progress |
 
 ## Setup notes
 
@@ -74,17 +76,19 @@ Notes:
 
 ### 3. Test on a supported AI chat site
 
-Open ChatGPT, Gemini, Claude, DeepSeek, or Microsoft Copilot, then send a prompt containing test data such as an email address or phone number. Prompt Guardian should intercept the send and open the review popup.
+Open ChatGPT, Gemini, Claude, DeepSeek, or Microsoft Copilot, then send a prompt containing test data such as an email address or phone number. PromptShield should intercept the send and open the review popup.
 
 ## Current Focus
 
-The active implementation work is in `browser-extension/`. It contains the Manifest V3 extension that:
+Both halves of the pipeline are actively developed:
 
-- Detects supported AI chat pages
-- Reads prompt text before send
-- Scans prompts through the local API
-- Shows a review popup with detected issues before sending
-- Lets the user send the sanitized prompt, send the original anyway, or cancel
+- `browser-extension/` — the Manifest V3 extension that:
+  - Detects supported AI chat pages
+  - Reads prompt text before send
+  - Scans prompts through the local API
+  - Shows a review popup (with detected issues and an AI-context summary) before sending
+  - Lets the user send the sanitized prompt, send the original anyway (unless the result is a hard `BLOCK`), or cancel
+- `backend/` — most recent work has gone into the detection pipeline itself: a three-tier lexical (TF-IDF) + semantic (FAISS/MiniLM) pre-classifier that resolves most prompts without an LLM call, a Smart LLM Router with multi-provider fallback (Ollama/Groq/Gemini/Bedrock), and pre-classification tuning. See [`backend/README.md`](backend/README.md) and [`backend/ai/README.md`](backend/ai/README.md) for details.
 
 ## Branch Layout
 
@@ -94,27 +98,36 @@ The active implementation work is in `browser-extension/`. It contains the Manif
 
 ## Repository Layout
 
-- [`backend/`](backend/) - FastAPI scanner service, Presidio integration, and backend README
+- [`backend/`](backend/) - FastAPI scanner service, Presidio integration, lexical/semantic pre-classifier, Smart LLM Router, Policy Engine, and backend README
 - [`browser-extension/`](browser-extension/) - Chrome extension source, manifest, icons, and extension README
-- `knowledge/` - shared research and project knowledge base
-- `samples/` - prompt samples and expected outputs
-- `tests/` - automated tests
-- `docs/` - architecture and project documentation
-- `scripts/` - utility scripts
+- [`knowledge/`](knowledge/) - fictional "NovaBank" enterprise knowledge base used by the semantic/ECI layer
+- [`specs/`](specs/) - Kiro-style requirements/design/tasks specs for backend features (e.g. the lexical + semantic retrieval upgrade)
+- [`samples/`](samples/) - prompt samples and expected outputs (scaffolded, not yet populated)
+- [`tests/`](tests/) - automated tests (pytest + Hypothesis property tests) and manual test-scenario docs
+- [`docs/`](docs/) - architecture, roadmap, and demo/presentation documentation
+- [`scripts/`](scripts/) - utility and demo scripts
+- [`ollama/`](ollama/) - research notes from evaluating Ollama as the local classification engine
+- `start-backend.bat` / `start-backend.ps1` - one-click backend launcher (creates venv, installs deps, runs uvicorn)
 
 ## Docs
 
 - Backend API: [`backend/README.md`](backend/README.md)
+- Semantic/ECI + pre-classifier layer: [`backend/ai/README.md`](backend/ai/README.md)
+- Policy engine: [`backend/policy/README.md`](backend/policy/README.md)
 - Browser extension: [`browser-extension/README.md`](browser-extension/README.md)
+- Knowledge base: [`knowledge/README.md`](knowledge/README.md)
+- Tests: [`tests/README.md`](tests/README.md)
+- Architecture, roadmap, demo script, presentation: [`docs/`](docs/)
 
 ## Development Status
 
 - Extension code has been reorganized under `browser-extension/`
 - Root repo structure has been created for backend and supporting work
 - `origin/main` has been merged into the extension branches so future merges from `main` are possible without losing the extension work
+- The backend's lexical + semantic retrieval upgrade (TF-IDF pre-classifier + FAISS/MiniLM semantic search) described in [`specs/lexical-semantic-upgrade/`](specs/lexical-semantic-upgrade/) has been implemented, reducing how often the LLM needs to be called
 
 ## Notes
 
 - The extension currently falls back to `SAFE` if the local scan API is unavailable, which keeps typing unblocked during development.
 - The scan API runs on `http://localhost:8081` by default.
-- Supported AI sites currently include ChatGPT, Gemini, Claude, DeepSeek, and Microsoft Copilot.
+- Supported AI sites currently include ChatGPT, Gemini, Claude, DeepSeek, and Microsoft Copilot (Bing Chat is matched under the Copilot site definition).

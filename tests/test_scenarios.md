@@ -9,16 +9,25 @@ decision - "expected direction" is guaranteed, exact wording of
 `reasoning` will vary).
 
 **How to test:** send each `Input` as `{"text": "..."}` to `POST /analyze`
-(via Swagger UI at `/docs`, or however routes.py exposes it once
-reconciled with the extension - see `docs/progress-summary.md`).
+(via Swagger UI at `/docs`) for Section A's Presidio-only rows, or as
+`{"prompt": "..."}` to `POST /api/scan` for anything that should exercise the
+full pipeline (pre-classifier/ECI/policy) - see `backend/README.md`'s
+Endpoints section for both request/response shapes.
+
+**`/api/scan` now requires an `X-API-Key` header** (see `backend/README.md`'s
+Authentication section) - enroll a device once via `POST /devices/enroll`
+and pass the returned key on every scan request, including through Swagger UI
+(use the "Authorize" button, or add the header manually per request).
 
 ---
 
-## Section A — Deterministic (Regex + Presidio + Policy only)
+## Section A — Deterministic (Presidio + Policy only)
 
 These don't depend on Ollama being up or accurate - if these fail, the
-bug is in `regex_engine.py`, `presidio_engine.py`, `helpers.py`, or
-`policy_engine.py`/`rules.json`, not the AI layer.
+bug is in `presidio_engine.py`, `helpers.py`, or `policy_engine.py`/
+`rules.json`, not the AI layer. (A dedicated Regex layer is planned but not
+yet built - see `backend/README.md`'s Known Limitations - so today this
+section is Presidio-only, not "Regex + Presidio".)
 
 ### A1. ALLOW — nothing detected
 
@@ -251,8 +260,8 @@ Gaurav alongside A4/A5/A8.
 ## Section C — Real-world composite (matches actual Presidio sample data)
 
 Gaurav's original real sample response, reused as a single realistic
-composite test - exercises regex, Presidio, merge/dedup, ECI, and
-policy all in one shot.
+composite test - exercises Presidio, merge/dedup, ECI, and policy all in
+one shot.
 
 **Input:**
 ```

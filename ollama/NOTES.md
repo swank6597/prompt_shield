@@ -4,6 +4,15 @@ Research into using Ollama with the Phi-4-mini model as the local AI risk-classi
 engine for PromptShield AI. Goal: confirm it can reliably analyze text and return a
 structured risk score + findings that our backend can parse.
 
+> **Where this landed:** the findings below (temperature 0, strip markdown fences,
+> retry on transient errors) fed directly into `backend/ai/ollama_client.py`. The
+> actual backend defaults to `phi3:mini`, not `phi4-mini` (see
+> `PROMPTSHIELD_OLLAMA_MODEL` in `backend/.env.example`), and risk scoring/thresholds
+> now live in `backend/policy/risk_engine.py` and `backend/policy/rules.json` rather
+> than a single Ollama-reported score — see [`../backend/ai/README.md`](../backend/ai/README.md)
+> and [`../backend/policy/README.md`](../backend/policy/README.md) for the current
+> design. This file is kept as the original research record, not current behavior.
+
 ## Setup
 
 1. Install Ollama: https://ollama.com/download/windows

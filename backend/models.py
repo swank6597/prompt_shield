@@ -29,6 +29,12 @@ class AnalyzeResponse(BaseModel):
 
 class ScanRequest(BaseModel):
     prompt: str
+    # Both optional so direct Swagger/curl testing with just {"prompt": ...}
+    # still works. audit_logger.log_scan() coalesces missing values to
+    # "unknown" - that policy lives there, not here, so this model stays a
+    # thin data holder.
+    username: str | None = None
+    platform: str | None = None
 
 
 class ScanIssue(BaseModel):

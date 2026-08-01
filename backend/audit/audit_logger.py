@@ -1,0 +1,277 @@
+# audit_logger.py
+# Audit Logger - persists a full compliance-grade record of every /api/scan
+# decision to SQLite: both the raw prompt and Presidio's masked version,
+# entity TYPES (never the raw matched values used in the live response's
+# issues list), the ECI classification, and the Policy Engine's decision.
+# This is an enterprise audit/logging product - retaining the raw prompt is
+# a deliberate requirement (compliance review, incident investigation,
+# legal hold), not an oversight. Access is controlled instead: the
+# dashboard (backend/dashboard/) that reads this table requires the admin
+# role for everything, not just the raw prompt.
+#
+# Known limitation - see README.md: masked_prompt's own redaction guarantee
+# is bounded by Presidio's recall. A detection below presidio_engine.py's
+# MIN_SCORE is filtered out BEFORE anonymization, so its raw text is still
+# sitting in maskedText verbatim; an entity type no recognizer knows how to
+# match is invisible entirely. Not something this module can fix - and
+# moot for raw_prompt specifically, which is never redacted in the first
+# place.
+
+import json
+import os
+import sqlite3
+import sys
+from datetime import datetime, timezone
+
+_BACKEND_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+
+from config import AUDIT_DB_PATH  # noqa: E402
+from utils.logger import get_logger  # noqa: E402
+
+log = get_logger("audit")
+
+# ECI boolean flags stored as individual INTEGER (0/1) columns rather than a
+# JSON blob - these are exactly what a dashboard filters/groups by
+# (WHERE eci_contains_secrets = 1, GROUP BY eci_intent), so they need to be
+# queryable columns. entity_types/matched_rules/eci_reasoning stay JSON TEXT
+# columns - variable-length, display-only, not first-class filter targets.
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS scan_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    username TEXT NOT NULL DEFAULT 'unknown',
+    platform TEXT NOT NULL DEFAULT 'unknown',
+    masked_prompt TEXT NOT NULL,
+    entity_count INTEGER NOT NULL DEFAULT 0,
+    entity_types TEXT NOT NULL DEFAULT '[]',
+    eci_intent TEXT,
+    eci_document_type TEXT,
+    eci_confidence REAL,
+    eci_requires_enterprise_knowledge INTEGER,
+    eci_contains_internal_architecture INTEGER,
+    eci_contains_implementation_details INTEGER,
+    eci_contains_source_code INTEGER,
+    eci_contains_customer_data INTEGER,
+    eci_contains_secrets INTEGER,
+    eci_impacts_gdpr INTEGER,
+    eci_impacts_pcidss INTEGER,
+    eci_impacts_hipaa INTEGER,
+    eci_impacts_iso27001 INTEGER,
+    eci_reasoning TEXT,
+    risk_score INTEGER,
+    matched_rules TEXT,
+    decision TEXT NOT NULL,
+    status TEXT NOT NULL,
+    presidio_ms REAL,
+    eci_ms REAL,
+    policy_ms REAL,
+    total_ms REAL
+);
+"""
+
+# Indexed on the three dimensions the eventual dashboard aggregates by
+# (counts by day/decision/platform). No username index yet - no concrete
+# query needs it today; cheap to add later if a per-user drill-down appears.
+_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_scan_audit_timestamp ON scan_audit_log(timestamp);",
+    "CREATE INDEX IF NOT EXISTS idx_scan_audit_decision ON scan_audit_log(decision);",
+    "CREATE INDEX IF NOT EXISTS idx_scan_audit_platform ON scan_audit_log(platform);",
+)
+
+# Added by specs/audit-dashboard-consolidation/ (Requirement 3/4) - a
+# human-readable `reason`, which LLM actually served the request (NULL when
+# the pre-classifier skipped it), the pre-classifier's routing label, and
+# the authenticated device/user (from backend/auth/) alongside the existing
+# best-effort username/platform. SQLite has no `ADD COLUMN IF NOT EXISTS`,
+# so each is attempted and the "duplicate column" error is swallowed -
+# additive and idempotent across restarts, same guarantee _SCHEMA already
+# provides for the table itself. No new index: none of these are an
+# established dashboard-query dimension yet (see design.md).
+_NEW_COLUMNS = (
+    ("reason", "TEXT"),
+    ("llm_provider", "TEXT"),
+    ("llm_model", "TEXT"),
+    ("decision_path", "TEXT"),
+    ("device_id", "INTEGER"),
+    ("owner_user_id", "INTEGER"),
+    # Always populated (see module docstring) - this product retains the
+    # raw prompt for enterprise audit/compliance purposes. Access is
+    # controlled at the dashboard layer (admin role required for
+    # everything), not by withholding this column.
+    ("raw_prompt", "TEXT"),
+)
+
+
+def _init_db() -> None:
+    """Idempotent - CREATE TABLE/INDEX IF NOT EXISTS never wipes prior rows,
+    and ADD COLUMN failures (column already exists) are swallowed the same
+    way."""
+    os.makedirs(os.path.dirname(AUDIT_DB_PATH), exist_ok=True)
+    with sqlite3.connect(AUDIT_DB_PATH) as conn:
+        conn.execute(_SCHEMA)
+        for statement in _INDEXES:
+            conn.execute(statement)
+        for column, sql_type in _NEW_COLUMNS:
+            try:
+                conn.execute(f"ALTER TABLE scan_audit_log ADD COLUMN {column} {sql_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists from a prior run
+        conn.commit()
+
+
+_init_db()  # module-level side effect, matches presidio_engine.py's pattern
+
+
+def log_scan(
+    *,
+    username: str | None,
+    platform: str | None,
+    masked_prompt: str,
+    entity_count: int,
+    entity_types: list,
+    eci: dict,
+    risk_score: int,
+    matched_rules: list,
+    decision: str,
+    status: str,
+    presidio_ms: float,
+    eci_ms: float,
+    policy_ms: float,
+    total_ms: float,
+    reason: str | None = None,
+    llm_provider: str | None = None,
+    llm_model: str | None = None,
+    decision_path: str | None = None,
+    device_id: int | None = None,
+    owner_user_id: int | None = None,
+    raw_prompt: str | None = None,
+) -> None:
+    """
+    Persists one scan's privacy-safe audit record. Never raises - any
+    failure (disk full, locked DB, permissions) is logged as a warning and
+    swallowed, matching ai/semantic_classifier.py's classify() contract:
+    audit logging must never break the actual /api/scan response.
+
+    masked_prompt must already be Presidio's anonymized output - never pass
+    the raw prompt here. entity_types must be type strings only - never
+    pass entities[].value (the raw matched value used in the live
+    response's issues list).
+
+    device_id/owner_user_id are the authenticated identity from
+    backend/auth/ (require_api_key); username/platform are the best-effort
+    display identity from the extension. Both are independent columns, not
+    a fallback chain - see specs/audit-dashboard-consolidation/design.md's
+    "Dual identity".
+
+    raw_prompt is always persisted alongside masked_prompt - see the
+    module docstring on why this product retains it. Access, not
+    withholding, is the control: backend/dashboard/routes.py requires the
+    admin role for the entire dashboard, not just this field.
+    """
+    try:
+        with sqlite3.connect(AUDIT_DB_PATH) as conn:
+            conn.execute(
+                """
+                INSERT INTO scan_audit_log (
+                    timestamp, username, platform, masked_prompt,
+                    entity_count, entity_types,
+                    eci_intent, eci_document_type, eci_confidence,
+                    eci_requires_enterprise_knowledge,
+                    eci_contains_internal_architecture,
+                    eci_contains_implementation_details,
+                    eci_contains_source_code, eci_contains_customer_data,
+                    eci_contains_secrets, eci_impacts_gdpr,
+                    eci_impacts_pcidss, eci_impacts_hipaa,
+                    eci_impacts_iso27001, eci_reasoning,
+                    risk_score, matched_rules, decision, status,
+                    presidio_ms, eci_ms, policy_ms, total_ms,
+                    reason, llm_provider, llm_model, decision_path,
+                    device_id, owner_user_id, raw_prompt
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    datetime.now(timezone.utc).isoformat(),
+                    username or "unknown",
+                    platform or "unknown",
+                    masked_prompt,
+                    entity_count,
+                    json.dumps(entity_types),
+                    eci.get("intent"),
+                    eci.get("documentType"),
+                    eci.get("confidence"),
+                    int(bool(eci.get("requiresEnterpriseKnowledge"))),
+                    int(bool(eci.get("containsInternalArchitecture"))),
+                    int(bool(eci.get("containsImplementationDetails"))),
+                    int(bool(eci.get("containsSourceCode"))),
+                    int(bool(eci.get("containsCustomerData"))),
+                    int(bool(eci.get("containsSecrets"))),
+                    int(bool(eci.get("impactsGDPR"))),
+                    int(bool(eci.get("impactsPCIDSS"))),
+                    int(bool(eci.get("impactsHIPAA"))),
+                    int(bool(eci.get("impactsISO27001"))),
+                    json.dumps(eci.get("reasoning", [])),
+                    risk_score,
+                    json.dumps(matched_rules),
+                    decision,
+                    status,
+                    presidio_ms,
+                    eci_ms,
+                    policy_ms,
+                    total_ms,
+                    reason,
+                    llm_provider,
+                    llm_model,
+                    decision_path,
+                    device_id,
+                    owner_user_id,
+                    raw_prompt,
+                ),
+            )
+            conn.commit()
+    except Exception as e:  # noqa: BLE001 - fail-safe by design, never raises
+        log.warning("Audit log write failed: %s", e)
+
+
+if __name__ == "__main__":
+    # Quick manual check: python audit_logger.py
+    log_scan(
+        username="test@example.com",
+        platform="ChatGPT",
+        masked_prompt="My email is <EMAIL_ADDRESS>",
+        entity_count=1,
+        entity_types=["EMAIL_ADDRESS"],
+        eci={
+            "intent": "Other",
+            "documentType": "None",
+            "requiresEnterpriseKnowledge": False,
+            "containsInternalArchitecture": False,
+            "containsImplementationDetails": False,
+            "containsSourceCode": False,
+            "containsCustomerData": False,
+            "containsSecrets": False,
+            "impactsGDPR": True,
+            "impactsPCIDSS": False,
+            "impactsHIPAA": False,
+            "impactsISO27001": False,
+            "confidence": 0.9,
+            "reasoning": ["Contains a personal email address."],
+        },
+        risk_score=5,
+        matched_rules=["mask_personal_identifiers"],
+        decision="MASK",
+        status="SANITIZE",
+        presidio_ms=12.3,
+        eci_ms=0.0,
+        policy_ms=0.5,
+        total_ms=13.1,
+        reason="Detected 1 sensitive item(s): EMAIL_ADDRESS",
+        llm_provider=None,
+        llm_model=None,
+        decision_path="pii_only",
+        device_id=1,
+        owner_user_id=None,
+        raw_prompt="My email is test@example.com",
+    )
+    print(f"Logged one test row to {AUDIT_DB_PATH}")

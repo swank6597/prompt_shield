@@ -13,28 +13,33 @@ Regex (planned) ─┐
 Presidio ─────────┘                                          ┌─→ decision (ALLOW/WARN/MASK/BLOCK)
                                                      decide() ─┤   explanation
 ECI (backend/ai/) ──────────→ eci {schema.json shape} ────────┘   riskScore
-                                                                   matchedRules
+  ↑ only runs for prompts the                                     matchedRules
+    pre-classifier escalates as
+    "true_ambiguity"; every other
+    prompt gets a synthesized
+    eci dict from pre_classifier.py
 ```
 
 `backend/routes.py`'s `/api/scan` endpoint calls `decide(detection, eci)` after
-running Presidio and ECI, then maps the result onto the status the browser
-extension understands:
+running Presidio and the pre-classifier/ECI layers (see `backend/ai/README.md`),
+then maps the result onto the status the browser extension understands:
 
 | Policy decision | Extension status | Meaning |
 |---|---|---|
 | `ALLOW` | `SAFE` | Sent automatically, no review popup |
 | `WARN` | `SANITIZE` | Review popup shown; user can send sanitized or override |
 | `MASK` | `SANITIZE` | Review popup shown; sanitized version recommended |
-| `BLOCK` | `BLOCK` | Review popup shown with strongest warning; user can still "Send Anyway" |
+| `BLOCK` | `BLOCK` | Review popup shown with strongest warning; the "Send Original" override is hidden for a real `BLOCK` (`allowOverride: false` in `browser-extension/content/observer.js`), so it cannot actually be sent as-is |
 
 `WARN` and `MASK` collapse to the same client-facing status because the
 extension only has three states (see
 `browser-extension/content/observer.js`) — the distinction between them still
 shows up server-side in `matchedRules` and logs.
 
-Regex isn't wired in yet, so `detection.entityTypes` today is Presidio-only.
-Adding Regex later just means including its hits in that list before calling
-`decide()` — no change needed here.
+There is no `backend/regex/` folder yet — Regex is planned but not built, so
+`detection.entityTypes` today is Presidio-only. Adding Regex later just means
+including its hits in that list before calling `decide()` — no change needed
+here.
 
 ## Files
 

@@ -7,11 +7,22 @@ import { normalizeIssueList } from "../utils/scan-utils.js";
  *
  * @param {{
  *   Logger: { info: (message: string) => void, warn: (message: string) => void, error: (message: string) => void },
- *   endpoint?: string
+ *   endpoint?: string,
+ *   username?: string | null,
+ *   platform?: string | null
  * }} params
- * @returns {{ scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, eci?: import("./modal.js").EciResult, raw?: unknown }> }}
+ * @returns {{
+ *   scanPrompt: (prompt: string) => Promise<{ status: string, reason?: string, sanitizedPrompt?: string, issues?: Array<{ entityType: string, value: string, score?: number }>, eci?: import("./modal.js").EciResult, raw?: unknown }>,
+ *   setUsername: (value: string | null) => void
+ * }}
  */
-export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOINT }) {
+export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOINT, username = null, platform = null }) {
+  // Not `const`: content.js resolves identity in the background (DOM
+  // detection can take a few retries - see identity.js) and calls
+  // setUsername() once it has an answer, rather than delaying
+  // send-interception setup on it.
+  let currentUsername = username;
+
   /**
    * Sends the prompt to the background worker for scanning.
    *
@@ -20,9 +31,11 @@ export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOIN
    */
   async function scanPrompt(prompt) {
     const response = await chrome.runtime.sendMessage({
-      type: "PROMPT_GUARDIAN_SCAN_PROMPT",
+      type: "PROMPTSHIELD_SCAN_PROMPT",
       prompt,
-      endpoint
+      endpoint,
+      username: currentUsername,
+      platform
     });
 
     if (!response) {
@@ -54,6 +67,9 @@ export function createPromptScanClient({ Logger, endpoint = DEFAULT_SCAN_ENDPOIN
   }
 
   return {
-    scanPrompt
+    scanPrompt,
+    setUsername(value) {
+      currentUsername = value;
+    }
   };
 }

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PromptShield Dashboard</title>
+<link rel="stylesheet" href="/dashboard/static/style.css" />
+</head>
+<body>
+
+<!-- ==================== Login screen ==================== -->
+<main id="login-screen" class="login-screen" hidden>
+  <form id="login-form" class="login-card">
+    <p class="eyebrow">PromptShield</p>
+    <h1>Dashboard sign in</h1>
+    <p class="description">Sign in with your dashboard account to view the audit trail.</p>
+    <label class="field">
+      <span>Username</span>
+      <input type="text" id="login-username" autocomplete="username" required />
+    </label>
+    <label class="field">
+      <span>Password</span>
+      <input type="password" id="login-password" autocomplete="current-password" required />
+    </label>
+    <button type="submit" class="btn-primary">Sign in</button>
+    <p id="login-error" class="login-error" hidden></p>
+  </form>
+</main>
+
+<!-- ==================== Dashboard ==================== -->
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <div class="topbar-title">
+      <p class="eyebrow">PromptShield</p>
+      <h1>Dashboard</h1>
+    </div>
+    <div class="topbar-actions">
+      <select id="range-select" class="select">
+        <option value="1">Last 24 hours</option>
+        <option value="7" selected>Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+      </select>
+      <span id="whoami" class="whoami"></span>
+      <button id="logout-btn" class="btn-ghost">Sign out</button>
+    </div>
+  </header>
+
+  <section class="stat-grid" id="stat-grid" aria-label="Summary">
+    <div class="stat-tile">
+      <p class="stat-label">Prompts scanned</p>
+      <p class="stat-value" id="stat-total">–</p>
+    </div>
+    <div class="stat-tile">
+      <p class="stat-label">Blocked</p>
+      <p class="stat-value stat-critical" id="stat-blocked">–</p>
+    </div>
+    <div class="stat-tile">
+      <p class="stat-label">Masked or flagged</p>
+      <p class="stat-value stat-warning" id="stat-sanitized">–</p>
+    </div>
+    <div class="stat-tile">
+      <p class="stat-label">Average risk score</p>
+      <p class="stat-value" id="stat-risk">–</p>
+    </div>
+    <div class="stat-tile">
+      <p class="stat-label">Resolved without an LLM call</p>
+      <p class="stat-value stat-good" id="stat-no-llm">–</p>
+    </div>
+  </section>
+
+  <section class="chart-grid">
+    <div class="panel">
+      <h2>Decisions over time</h2>
+      <div id="chart-decisions" class="chart-area"></div>
+      <ul class="legend" id="legend-decisions"></ul>
+    </div>
+    <div class="panel">
+      <h2>Which layer resolved the prompt</h2>
+      <div id="chart-layers" class="bar-list"></div>
+    </div>
+    <div class="panel">
+      <h2>LLM provider usage</h2>
+      <div id="chart-providers" class="bar-list"></div>
+    </div>
+  </section>
+
+  <section class="panel table-panel">
+    <div class="table-toolbar">
+      <h2>Scan events</h2>
+      <div class="filters">
+        <select id="filter-decision" class="select">
+          <option value="">All decisions</option>
+          <option value="ALLOW">ALLOW</option>
+          <option value="WARN">WARN</option>
+          <option value="MASK">MASK</option>
+          <option value="BLOCK">BLOCK</option>
+        </select>
+        <input type="text" id="filter-search" class="text-input" placeholder="Search prompt, user, reason…" />
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table class="events-table" id="events-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Platform</th>
+            <th>Prompt (masked)</th>
+            <th>Decision</th>
+            <th>Risk</th>
+            <th>Layer</th>
+            <th>LLM</th>
+          </tr>
+        </thead>
+        <tbody id="events-body"></tbody>
+      </table>
+    </div>
+    <div class="table-footer">
+      <button id="prev-page" class="btn-ghost" disabled>← Newer</button>
+      <span id="page-info" class="muted"></span>
+      <button id="next-page" class="btn-ghost">Older →</button>
+    </div>
+  </section>
+</div>
+
+<script src="/dashboard/static/app.js"></script>
+</body>
+</html>

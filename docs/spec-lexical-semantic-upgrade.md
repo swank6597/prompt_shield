@@ -1,7 +1,12 @@
 # Development Spec: Lexical + Semantic Retrieval Upgrade
 ## PromptShield Phase 2 Intelligence Layer
 
-**Status:** Ready for implementation
+**Status:** Implemented. This was the original planning brief; the formal,
+implemented spec (requirements/design/tasks, with correctness properties and
+property-based tests) lives in
+[`../specs/lexical-semantic-upgrade/`](../specs/lexical-semantic-upgrade/).
+Kept here as the initial design record - see `backend/ai/README.md` and
+`backend/README.md` for how the shipped system actually behaves.
 **Author:** Kiro (AI Architect) + Atharva Gulhane
 **Date:** July 2026
 **Branch:** Create feature/lexical-semantic-upgrade from agentic-ai-implementation

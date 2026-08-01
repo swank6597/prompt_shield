@@ -43,13 +43,26 @@ LLM_AUTO_ENTITY_THRESHOLD = int(os.environ.get("PROMPTSHIELD_LLM_AUTO_ENTITY_THR
 
 # --- Fallback behavior ---
 LLM_FALLBACK_TO_LOCAL = os.environ.get("PROMPTSHIELD_LLM_FALLBACK_TO_LOCAL", "true").lower() == "true"
+# Mirror of the above: if local Ollama fails (unreachable, timeout, bad
+# output), fall back to the configured cloud provider instead of giving up.
+# Local is still given its full configured chance first (OLLAMA_TIMEOUT_SECONDS
+# + OLLAMA_MAX_RETRIES below) - this only kicks in once local has actually
+# exhausted that budget and failed, not as a way to cut its chance short.
+LLM_FALLBACK_TO_CLOUD = os.environ.get("PROMPTSHIELD_LLM_FALLBACK_TO_CLOUD", "true").lower() == "true"
 
 # =============================================================================
 # --- Ollama / local LLM settings ---
 # =============================================================================
 OLLAMA_HOST = os.environ.get("PROMPTSHIELD_OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("PROMPTSHIELD_OLLAMA_MODEL", "phi3:mini")
-OLLAMA_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_OLLAMA_TIMEOUT", "180"))
+# 20s, not 180s: deliberate dev-phase choice, not a "give local its best shot"
+# value. There's no warm-up call anywhere in the running app (only in test
+# scripts), and phi3:mini on modest CPU hardware has been directly measured
+# taking 30-180s+ even so - at any timeout in that range, local essentially
+# never succeeds anyway, so a long timeout only adds latency before the
+# LLM_FALLBACK_TO_CLOUD path (llm_router.py) kicks in, with no upside.
+# Revisit this once real local-inference infra exists post-hackathon.
+OLLAMA_TIMEOUT_SECONDS = int(os.environ.get("PROMPTSHIELD_OLLAMA_TIMEOUT", "20"))
 OLLAMA_MAX_RETRIES = int(os.environ.get("PROMPTSHIELD_OLLAMA_MAX_RETRIES", "1"))
 
 # =============================================================================
@@ -105,3 +118,54 @@ HYBRID_ENTERPRISE_THRESHOLD = float(os.environ.get("PROMPTSHIELD_HYBRID_ENTERPRI
 # --- Legacy fallback ---
 # =============================================================================
 USE_LEGACY_SEARCH = os.environ.get("PROMPTSHIELD_USE_LEGACY_SEARCH", "false").lower() == "true"
+
+# =============================================================================
+# --- Audit log settings (see backend/audit/README.md) ---
+# =============================================================================
+# SQLite file backing the audit trail. Colocated with the module by default;
+# override for a shared location (e.g. a mounted volume) without a code change.
+AUDIT_DB_PATH = os.environ.get(
+    "PROMPTSHIELD_AUDIT_DB_PATH",
+    os.path.join(os.path.dirname(__file__), "audit", "audit_log.db"),
+)
+
+# =============================================================================
+# --- Authentication settings (see specs/authentication/) ---
+# =============================================================================
+# Secret used to sign Access_Tokens (JWT, HS256). No safe default - left empty
+# so backend/auth/security.py can fail loudly at import time instead of
+# silently signing tokens with a well-known key. Generate one with:
+#   python -c "import secrets; print(secrets.token_urlsafe(32))"
+AUTH_SECRET_KEY = os.environ.get("PROMPTSHIELD_AUTH_SECRET_KEY", "")
+
+# Access token lifetime in minutes.
+AUTH_TOKEN_EXPIRE_MINUTES = int(os.environ.get("PROMPTSHIELD_AUTH_TOKEN_EXPIRE_MINUTES", "60"))
+
+# bcrypt work factor for password/API-key hashing.
+AUTH_BCRYPT_ROUNDS = int(os.environ.get("PROMPTSHIELD_AUTH_BCRYPT_ROUNDS", "12"))
+
+# Minimum plaintext password length accepted at account creation.
+AUTH_MIN_PASSWORD_LENGTH = int(os.environ.get("PROMPTSHIELD_AUTH_MIN_PASSWORD_LENGTH", "8"))
+
+# Login lockout: after this many consecutive failed attempts, the account is
+# locked for AUTH_LOGIN_LOCKOUT_MINUTES.
+AUTH_LOGIN_MAX_ATTEMPTS = int(os.environ.get("PROMPTSHIELD_AUTH_LOGIN_MAX_ATTEMPTS", "5"))
+AUTH_LOGIN_LOCKOUT_MINUTES = int(os.environ.get("PROMPTSHIELD_AUTH_LOGIN_LOCKOUT_MINUTES", "15"))
+
+# SQLite file for users/devices/auth_audit_log (git-ignored, created on first run).
+AUTH_DB_PATH = os.environ.get(
+    "PROMPTSHIELD_AUTH_DB_PATH",
+    str(Path(__file__).parent / "auth" / "auth.db"),
+)
+
+# CORS origins allowed to call /auth/* and /devices/* - deliberately NOT the
+# same wildcard as /api/scan (Requirement 8.1 in specs/authentication/):
+# those routes expose login/audit/device-management, a more sensitive
+# surface than a stateless scan call. Empty by default since no real
+# dashboard origin exists yet; comma-separated list, e.g.
+# "https://dashboard.internal.example.com,http://localhost:5173".
+AUTH_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("PROMPTSHIELD_AUTH_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+]

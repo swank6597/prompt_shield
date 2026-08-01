@@ -44,6 +44,12 @@ pip-delete-this-directory.txt
 *.manifest
 *.spec
 
+# SQLite databases (auth.db, audit_log.db, and any future dashboard db)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 # Pytest / Coverage
 .pytest_cache/
 .coverage
@@ -51,6 +57,9 @@ pip-delete-this-directory.txt
 htmlcov/
 coverage.xml
 *.cover
+
+# Hypothesis (property-based testing example database)
+.hypothesis/
 
 # mypy / type checkers
 .mypy_cache/

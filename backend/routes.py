@@ -13,16 +13,21 @@
 #      - General knowledge, no enterprise overlap -> skip LLM
 #      - Enterprise context ambiguous -> CALL LLM (only case that needs AI)
 #   3. Policy engine makes final decision from all signals
+#   4. Audit trail: every decision is persisted (backend/audit/) - see the
+#      log_scan() call at the end of scan_prompt().
 
 import os
 import sys
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from audit.audit_logger import log_scan
 from models import AnalyzeRequest, AnalyzeResponse, ECIResult, EntityResult, ScanRequest, ScanResponse
 from presidio.presidio_engine import analyze_text
 from utils.logger import get_logger
+from auth import service as auth_service
+from auth.dependencies import require_api_key
 
 # backend/ai/'s and backend/policy/'s modules use bare imports (e.g.
 # `from keyword_search import search`, `from risk_engine import
@@ -73,8 +78,12 @@ def analyze(request: AnalyzeRequest):
 
 
 @router.post("/api/scan", response_model=ScanResponse)
-def scan_prompt(request: ScanRequest):
-    log.info("Scan request received (prompt_len=%d)", len(request.prompt))
+def scan_prompt(request: ScanRequest, device: auth_service.Device = Depends(require_api_key)):
+    request_start = time.perf_counter()
+    log.info(
+        "Scan request received (prompt_len=%d, device_id=%d, owner_user_id=%s)",
+        len(request.prompt), device.id, device.owner_user_id,
+    )
 
     # =========================================================================
     # Stage 1: Presidio (always runs - cheap, local, ~20ms)
@@ -139,6 +148,15 @@ def scan_prompt(request: ScanRequest):
                 eci_raw.get("confidence", 0.0), eci_ms,
             )
 
+    # semantic_classifier.classify() stashes these on a real LLM call (never
+    # part of ai/schema.json's public contract) so the audit trail can
+    # report which provider/model served the request - pop them before
+    # building ECIResult so they never leak into the client-facing response
+    # or trip Pydantic on an unexpected field. Absent (None) when the
+    # pre-classifier skipped the LLM entirely.
+    llm_provider = eci_raw.pop("_llm_provider", None)
+    llm_model = eci_raw.pop("_llm_model", None)
+
     eci_result = ECIResult(**eci_raw)
 
     # =========================================================================
@@ -178,6 +196,43 @@ def scan_prompt(request: ScanRequest):
         status, policy_result["decision"], pre_result["decision_path"],
         f"{hybrid_score:.4f}" if hybrid_score is not None else "N/A",
         total_ms, presidio_ms, pre_ms, eci_ms, policy_ms,
+    )
+
+    # Audit trail: both masked_prompt and the raw prompt are persisted -
+    # this is an enterprise audit/compliance product, retaining the raw
+    # prompt is a deliberate requirement, not an oversight (see
+    # backend/audit/README.md). entity_types only (never entities[].value,
+    # the raw matched value used in the `issues` list above). log_scan()
+    # never raises - a DB failure logs a warning and is swallowed, never
+    # affecting this response. Carries both the authenticated device
+    # identity (device_id/owner_user_id, from require_api_key above) and
+    # the best-effort display identity (username/platform, from the
+    # extension) - see specs/audit-dashboard-consolidation/design.md's
+    # "Dual identity". Access to all of this, raw prompt included, is
+    # controlled at the dashboard layer (admin role required) rather than
+    # by withholding it here.
+    log_scan(
+        device_id=device.id,
+        owner_user_id=device.owner_user_id,
+        username=request.username,
+        platform=request.platform,
+        masked_prompt=result["maskedText"],
+        raw_prompt=request.prompt,
+        entity_count=result["entityCount"],
+        entity_types=sorted(set(detection["entityTypes"])),
+        eci=eci_raw,
+        reason=policy_result["explanation"],
+        risk_score=policy_result["riskScore"],
+        matched_rules=policy_result["matchedRules"],
+        decision=policy_result["decision"],
+        status=status,
+        decision_path=pre_result["decision_path"],
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        presidio_ms=presidio_ms,
+        eci_ms=eci_ms,
+        policy_ms=policy_ms,
+        total_ms=total_ms,
     )
 
     return ScanResponse(
