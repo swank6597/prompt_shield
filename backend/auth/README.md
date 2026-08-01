@@ -49,7 +49,7 @@ Dashboard (future)   Authorization: Bearer <JWT>   backend/auth/routes.py
 
 1. Generate a secret and add it to `backend/.env`:
    ```
-   python -c "import secrets; print(secrets.token_urlsafe(32))"
+   python -c "import secrets; print(secrets.token_urlsafe(32))"        
    ```
    `backend/auth/security.py` raises `RuntimeError` at import time if
    `PROMPTSHIELD_AUTH_SECRET_KEY` is unset - the backend will not start silently
@@ -64,6 +64,26 @@ Dashboard (future)   Authorization: Bearer <JWT>   backend/auth/routes.py
    POST /devices/enroll {"label": "my-laptop"}                  -> apiKey (shown once)
    ```
 4. Use the `apiKey` as `X-API-Key` on `/api/scan` requests.
+
+### Same thing, via Swagger UI instead of curl
+
+There is no single shared Swagger page - `/auth/login` lives on
+`http://localhost:8081/auth/docs`, `/devices/enroll` on
+`http://localhost:8081/devices/docs`, and `/api/scan` on plain
+`http://localhost:8081/docs`. Each is its own mounted sub-app with its own
+OpenAPI schema (see `app.py`'s CORS comment for why), so:
+
+1. Open `/auth/docs`, run `POST /login`, copy `accessToken` from the response.
+2. Click 🔒 **Authorize** on that same page and paste the token (no `Bearer `
+   prefix needed - it's a real `HTTPBearer` security scheme).
+3. Open `/devices/docs` - a **separate page with its own auth state** -
+   authorizing on `/auth/docs` in step 2 does not carry over here. Click
+   🔒 **Authorize** again and paste the same `accessToken`, *then* run
+   `POST /enroll`, so the device gets linked to your account
+   (`ownerUserId`) instead of created anonymously.
+4. Copy `apiKey` from the response - shown once, not retrievable again.
+5. To try `/api/scan` itself, open `/docs`, click 🔒 **Authorize**, and paste
+   the `apiKey` into the `X-API-Key` field.
 
 ## Known limitations (intentional, see `specs/authentication/design.md`)
 

@@ -289,8 +289,22 @@ See [`specs/authentication/`](../specs/authentication/) for the full design. Sum
   `PROMPTSHIELD_AUTH_*` settings.
 - These route groups are mounted as separate sub-apps in `app.py` so
   `/auth/*`/`/devices/*`/`/dashboard/*` can have a different (non-wildcard) CORS
-  policy than `/api/scan` - each has its own `/docs` (e.g. `/auth/docs`,
-  `/devices/docs`).
+  policy than `/api/scan` - each has its own Swagger page, not one shared `/docs`:
+
+  | Swagger page | Covers |
+  |---|---|
+  | `/docs` | the scan API itself (`/health`, `/analyze`, `/api/scan`) |
+  | `/auth/docs` | `/auth/login`, `/logout`, `/me`, `/audit-log` |
+  | `/devices/docs` | `/devices/enroll`, list, `/{id}/revoke` |
+
+  Each endpoint uses a real FastAPI security scheme (`APIKeyHeader`/`HTTPBearer`,
+  not a raw header param), so every page shows a working 🔒 **Authorize** button -
+  paste just the raw token/key, no need to type `Bearer <token>` yourself.
+  **Authorizing on one page does not carry over to another** (three independent
+  sub-apps, three independent OpenAPI schemas/auth states) - e.g. authorize on
+  `/auth/docs` to log in, then authorize *again* with the same `accessToken` on
+  `/devices/docs` before calling `/enroll`, so the enrolled device gets linked to
+  your user account (`ownerUserId`) rather than created anonymously.
 
 ## Dashboard
 
