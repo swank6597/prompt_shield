@@ -16,6 +16,26 @@ Defined per-site in `content/site-definitions.js` and mirrored in
 - **Claude** — `claude.ai`
 - **DeepSeek** — `chat.deepseek.com`, `chat.deepseek.ai`
 - **Microsoft Copilot** — `copilot.microsoft.com`, `copilot.cloud.microsoft`, and `www.bing.com/chat*` (Bing Chat is matched under this same site definition)
+- **Google Search AI** — `www.google.com/search` (AI Overviews follow-ups, AI Mode at `udm=50`)
+- **Google Homepage** — `www.google.com` (homepage search bar)
+
+### Navigation-Level Interception
+
+Some surfaces cannot be intercepted via content scripts because the prompt is
+embedded in a navigation URL rather than typed into a DOM input:
+
+- **New Tab Page (NTP)** — Chrome's built-in new-tab search box triggers a
+  navigation to `google.com/search?q=…`. PromptShield intercepts this via the
+  `webNavigation.onBeforeNavigate` API, extracts the query parameter, scans it,
+  and redirects to an interstitial review page if sensitive data is detected.
+  Anti-double-interception logic ensures the content script on the resulting
+  Google Search page does not re-scan the same prompt.
+
+- **Chrome AI (Gemini Nano)** — Monitoring of Chrome's built-in AI features
+  (Gemini Nano) is best-effort via the `webRequest` API. Requests to known
+  Generative Language API endpoints are observed and logged for audit purposes.
+  Due to browser security restrictions, request bodies may not always be
+  accessible, so this acts as an alerting mechanism rather than a blocking gate.
 
 ## Quick Start
 
@@ -79,6 +99,11 @@ Backend details: [`../backend/README.md`](../backend/README.md)
 - SAFE / SANITIZE / BLOCK response handling — a real `BLOCK` hides the "Send Original" option entirely, so it cannot be overridden
 - A separate, static toolbar popup (`popup/popup.html`) showing a feature summary — distinct from the in-page review modal described below; it has no interactivity beyond loading
 - Shared logger utility with consistent `[PromptShield]` output
+- Chrome New Tab Page search interception via webNavigation API
+- Chrome built-in AI (Gemini Nano) best-effort monitoring via webRequest API
+- Suggestion chip click interception on Google AI Mode
+- Anti-double-interception coordination between NTP and content scripts
+- Interstitial review page for navigation-level interception
 
 ## Review Popup Flow
 

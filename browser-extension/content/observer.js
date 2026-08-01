@@ -122,12 +122,27 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
       const sendButton = state.sendButton;
       const promptTextArea = state.promptTextArea;
 
+      // Preserve URL parameters (like udm=50 for AI Mode) by injecting
+      // hidden inputs into the form before submitting.
+      const form = promptTextArea?.closest("form");
+      if (form) {
+        const currentUrl = new URL(windowRef.location.href);
+        // If we're on an AI Mode page (udm=50), ensure the form preserves it
+        const udm = currentUrl.searchParams.get("udm");
+        if (udm && !form.querySelector('input[name="udm"]')) {
+          const hiddenInput = documentRef.createElement("input");
+          hiddenInput.type = "hidden";
+          hiddenInput.name = "udm";
+          hiddenInput.value = udm;
+          form.appendChild(hiddenInput);
+        }
+      }
+
       if (sendButton && typeof sendButton.click === "function") {
         sendButton.click();
         return;
       }
 
-      const form = promptTextArea?.closest("form");
       if (form && typeof form.requestSubmit === "function") {
         form.requestSubmit();
         return;
@@ -539,12 +554,22 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
     clearPendingSendState();
   }
 
+  /**
+   * Sets the bypassOnce flag so the next send attempt passes through unscanned.
+   * Used by the anti-double-interception coordination to skip the first interception
+   * cycle when the query was already approved via the NTP interstitial.
+   */
+  function setBypassOnce() {
+    state.bypassOnce = true;
+  }
+
   return {
     start,
     stop,
     cancelPendingSend,
     sendSanitizedPrompt,
-    sendOriginalPrompt
+    sendOriginalPrompt,
+    setBypassOnce
   };
 }
 

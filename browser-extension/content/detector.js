@@ -117,6 +117,7 @@ function scorePromptCandidate(element, hints) {
     element.getAttribute("name"),
     element.getAttribute("id"),
     element.getAttribute("data-placeholder"),
+    element.getAttribute("class"),
     element.textContent
   ]
     .filter(Boolean)
@@ -145,8 +146,17 @@ function scorePromptCandidate(element, hints) {
     score += 2;
   }
 
+  if (element.closest("[role='search']")) {
+    score += 2;
+  }
+
   if (isVisibleElement(element)) {
     score += 2;
+  }
+
+  // Boost elements inside a combobox (Google's search input pattern)
+  if (element.closest("[role='combobox']")) {
+    score += 1;
   }
 
   for (const hint of hints) {

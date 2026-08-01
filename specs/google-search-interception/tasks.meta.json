@@ -1,0 +1,311 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1. Update manifest.json with Google permissions and new APIs": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565064211
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565077373
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565179960
+      }
+    ],
+    "2. Add `pathExclusions` support to `createSiteDefinition`": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565064903
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565185123
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565384654
+      }
+    ],
+    "3. Add Google Search AI site definition": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065063
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565390137
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565456119
+      }
+    ],
+    "4. Add Google Homepage site definition": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065198
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565461156
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565537411
+      }
+    ],
+    "5. Checkpoint — content script activation on Google surfaces": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065339
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565543572
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565749513
+      }
+    ],
+    "6. Refine DOM detection for Google AI Mode and AI Overviews": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065474
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565755711
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565910404
+      }
+    ],
+    "7. Implement suggestion chip interceptor (`content/chip-interceptor.js`)": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065571
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565916052
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566205929
+      }
+    ],
+    "8. Wire chip interceptor into content.js bootstrap": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065674
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566211244
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566465688
+      }
+    ],
+    "9. Checkpoint — full content-script interception on Google surfaces": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065775
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566471120
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566857242
+      }
+    ],
+    "10. Implement NTP navigation interceptor (`background/ntp-interceptor.js`)": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065856
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566863042
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566970455
+      }
+    ],
+    "11. Build interstitial review page (`interstitial/`)": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565065968
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785566975537
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567149943
+      }
+    ],
+    "12. Wire NTP interceptor into background.js": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066112
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567156424
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567218650
+      }
+    ],
+    "13. Implement anti-double-interception coordination": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066244
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567224135
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567464476
+      }
+    ],
+    "14. Checkpoint — NTP interception end-to-end": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066341
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567470738
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567610121
+      }
+    ],
+    "15. Implement Gemini Nano monitor (`background/gemini-monitor.js`)": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066435
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567616886
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567731021
+      }
+    ],
+    "16. Wire Gemini monitor into background.js": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066541
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567736846
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567788956
+      }
+    ],
+    "17. Update extension popup and documentation": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066649
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567794554
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567883681
+      }
+    ],
+    "18. Final checkpoint — feature complete": [
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785565066745
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785567889288
+      },
+      {
+        "executionId": "afd4c6a4-96ef-4d17-af0d-e93dd909598a",
+        "chatSessionId": "sess_657d0105-2b64-45bc-9307-bce52cb7f73f",
+        "timestamp": 1785568172994
+      }
+    ]
+  }
+}

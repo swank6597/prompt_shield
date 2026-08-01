@@ -50,6 +50,7 @@ function matchesHostname(hostname, expectedHosts) {
  *   label: string,
  *   hosts: string[],
  *   pathPrefixes?: string[],
+ *   pathExclusions?: string[],
  *   promptHints: string[],
  *   sendHints: string[],
  *   apiEndpoint?: string,
@@ -71,7 +72,7 @@ function matchesHostname(hostname, expectedHosts) {
  *   matchUrl: (url: string) => boolean
  * }}
  */
-function createSiteDefinition(site) {
+export function createSiteDefinition(site) {
   return {
     id: site.id,
     label: site.label,
@@ -91,6 +92,10 @@ function createSiteDefinition(site) {
       try {
         const parsedUrl = new URL(url);
         const hostMatches = matchesHostname(parsedUrl.hostname, site.hosts);
+        const pathExcluded = site.pathExclusions?.some(
+          (prefix) => parsedUrl.pathname.startsWith(prefix)
+        );
+        if (pathExcluded) return false;
         const pathMatches = !site.pathPrefixes?.length
           ? true
           : site.pathPrefixes.some((prefix) => parsedUrl.pathname.startsWith(prefix));
@@ -205,6 +210,112 @@ export const SITE_DEFINITIONS = [
     // back to the manually configured popup value.
     promptHints: ["copilot", "ask", "message", "prompt"],
     sendHints: ["send", "submit", "ask"]
+  }),
+  createSiteDefinition({
+    id: "google-search-ai",
+    label: "Google Search AI",
+    hosts: ["www.google.com", "google.com"],
+    pathPrefixes: ["/search"],
+    promptSelectors: [
+      // Google's primary search textarea class (stable across redesigns)
+      "textarea.gLFyf",
+      // AI Mode conversational input — multiple variants
+      "textarea[aria-label*='Search' i]",
+      "textarea[aria-label*='Ask' i]",
+      "textarea[aria-label*='follow' i]",
+      "textarea[jsname]",
+      "div[contenteditable='true'][aria-label*='Search' i]",
+      "div[contenteditable='true'][aria-label*='Ask' i]",
+      "div[contenteditable='true'][role='textbox']",
+      "div[contenteditable='true'][data-placeholder]",
+      // Scoped search container patterns
+      "[role='search'] textarea",
+      "[role='search'] input[type='text']",
+      // AI Overviews follow-up input
+      "input[aria-label*='Ask a follow up' i]",
+      "input[aria-label*='follow up' i]",
+      "input[aria-label*='Ask' i]",
+      // Standard search refinement
+      "textarea[name='q']",
+      "input[name='q']",
+      // Google AI Mode uses combobox role for the input
+      "[role='combobox'] textarea",
+      "[role='combobox'] input",
+      // Catch-all for any textarea on the page
+      "textarea",
+      // Generic fallbacks
+      ...COMMON_PROMPT_SELECTORS
+    ],
+    sendSelectors: [
+      "button[aria-label*='Search' i]",
+      "button[aria-label*='Google Search' i]",
+      "button[aria-label*='Send' i]",
+      "button[aria-label*='Ask' i]",
+      "button[aria-label*='Submit' i]",
+      // Google uses jsname attributes on interactive elements
+      "[role='search'] button[jsname]",
+      "[role='search'] button",
+      "form[action='/search'] button[type='submit']",
+      "button[type='submit']",
+      // SVG send icon buttons (Google often uses these)
+      "button:has(svg)",
+      ...COMMON_SEND_SELECTORS
+    ],
+    promptScopeSelectors: [
+      "form[action='/search']",
+      "[role='search']",
+      "[role='combobox']",
+      ...COMMON_SCOPE_SELECTORS
+    ],
+    sendScopeSelectors: [
+      "form[action='/search']",
+      "[role='search']",
+      "[role='combobox']",
+      ...COMMON_SCOPE_SELECTORS
+    ],
+    promptHints: ["search", "ask", "follow up", "query", "ai mode", "gLFyf", "search-input", "搜索"],
+    sendHints: ["search", "send", "submit", "ask", "google search"]
+  }),
+  createSiteDefinition({
+    id: "google-homepage",
+    label: "Google Homepage",
+    hosts: ["www.google.com", "google.com"],
+    pathExclusions: ["/search", "/maps", "/mail", "/drive", "/calendar", "/docs"],
+    promptSelectors: [
+      "textarea.gLFyf",
+      "textarea[name='q']",
+      "input[name='q']",
+      "textarea[aria-label*='Search' i]",
+      "[role='search'] textarea",
+      "[role='combobox'] textarea",
+      ...COMMON_PROMPT_SELECTORS
+    ],
+    sendSelectors: [
+      "input[name='btnK']",
+      "input[name='btnI']",
+      "button[aria-label*='Google Search' i]",
+      // AI Mode button on Google homepage — this triggers navigation to /search?udm=50
+      "button[aria-label*='AI' i]",
+      "a[aria-label*='AI Mode' i]",
+      "a[href*='udm=50']",
+      "[data-ved] button[jsname]",
+      "[role='search'] button[jsname]",
+      "button[type='submit']",
+      ...COMMON_SEND_SELECTORS
+    ],
+    promptScopeSelectors: [
+      "form[action='/search']",
+      "[role='search']",
+      "[role='combobox']",
+      ...COMMON_SCOPE_SELECTORS
+    ],
+    sendScopeSelectors: [
+      "form[action='/search']",
+      "[role='search']",
+      ...COMMON_SCOPE_SELECTORS
+    ],
+    promptHints: ["search", "google", "query", "gLFyf", "search-input"],
+    sendHints: ["search", "submit", "feeling lucky", "google search"]
   })
 ];
 

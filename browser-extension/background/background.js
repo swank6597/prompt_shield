@@ -1,6 +1,8 @@
 ﻿import { Logger } from "../utils/logger.js";
 import { normalizeIssueList } from "../utils/scan-utils.js";
 import { getOrCreateApiKey, clearStoredApiKey } from "./device-auth.js";
+import { startNtpInterceptor } from "./ntp-interceptor.js";
+import { startGeminiMonitor } from "./gemini-monitor.js";
 
 const DEFAULT_SCAN_ENDPOINT = "http://localhost:8081/api/scan";
 
@@ -88,6 +90,12 @@ async function scanPrompt(prompt, endpoint = DEFAULT_SCAN_ENDPOINT, username, pl
 
 if (chrome?.runtime?.onMessage?.addListener) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    // Handle tab ID requests from content scripts (for anti-double-interception coordination)
+    if (message && message.type === "PROMPT_GUARDIAN_GET_TAB_ID") {
+      sendResponse({ tabId: sender.tab?.id ?? null });
+      return false;
+    }
+
     if (!message || message.type !== "PROMPTSHIELD_SCAN_PROMPT") {
       return false;
     }
@@ -105,6 +113,9 @@ if (chrome?.runtime?.onMessage?.addListener) {
     return true;
   });
 }
+
+startNtpInterceptor({ Logger, scanPrompt });
+startGeminiMonitor({ Logger, scanPrompt });
 
 Logger.info("Background Service Worker Loaded");
 
