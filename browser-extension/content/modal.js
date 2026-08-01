@@ -48,6 +48,63 @@ const ECI_FLAGS = [
   ["containsSecrets", "Possible Secrets"]
 ];
 
+// Empty-state copy for the Detected Issues panel.
+//
+// The panel is fed from Presidio entity spans, so a decision driven purely by
+// enterprise-context analysis has nothing to list - entityCount is 0 while the
+// ECI flags and the policy reason carry the whole explanation. The old single
+// string ("no details were returned") was wrong in that case: details *were*
+// returned, just not as detected spans, and they are already on screen in the
+// AI Context Analysis section directly below. Saying nothing came back
+// contradicts that section and reads as a scanner malfunction on a decision
+// that is entirely correct.
+//
+// Kept character-identical to ISSUES_EMPTY_STATE in
+// interstitial/review.js - both surfaces render the same decision and must
+// word it the same way. interstitial/review.test.mjs asserts they match.
+const ISSUES_EMPTY_STATE = {
+  context:
+    "No individual values were flagged in the text itself. This decision was driven by the enterprise-context analysis below.",
+  unavailable:
+    "No individual values were flagged in the text itself, and the context classifier could not complete its analysis, so this was held for review out of caution.",
+  none: "No specific issue details were returned by the scanner."
+};
+
+/**
+ * Classifies what, if anything, the ECI section is able to explain. Single
+ * source of truth for the fallback test, so the issues panel and the ECI
+ * section can never disagree about whether the classifier actually ran.
+ *
+ *  - "unavailable": the classifier fell back (unreachable provider, or output
+ *    that failed validation). Its all-false flags and 0% confidence are
+ *    defaults, not an assessment, so they must not be read as findings.
+ *  - "context": the classifier ran and returned something that explains the
+ *    decision - a raised flag, or reasoning describing what it saw.
+ *  - "none": no ECI at all, or an assessment that raised nothing.
+ *
+ * @param {EciResult | undefined} eci
+ * @returns {"context" | "unavailable" | "none"}
+ */
+function describeEciExplanation(eci) {
+  if (!eci) {
+    return "none";
+  }
+
+  const isFallback =
+    eci.confidence === 0 &&
+    Array.isArray(eci.reasoning) &&
+    eci.reasoning.some((entry) => /fallback/i.test(String(entry)));
+
+  if (isFallback) {
+    return "unavailable";
+  }
+
+  const hasFlags = ECI_FLAGS.some(([key]) => eci[key]);
+  const hasReasoning = Array.isArray(eci.reasoning) && eci.reasoning.length > 0;
+
+  return hasFlags || hasReasoning ? "context" : "none";
+}
+
 /**
  * Creates the in-page review dialog shown after a prompt scan.
  *
@@ -61,6 +118,24 @@ const ECI_FLAGS = [
 export function createReviewDialog(handlers) {
   let host = null;
   let shadow = null;
+
+  // Persistent references to the action row and its buttons. Held here rather
+  // than looked up per show() because show() detaches the send buttons that
+  // aren't permitted for the current decision - once detached they are no
+  // longer findable via shadow.getElementById().
+  let actionsNode = null;
+  let sendOriginalButton = null;
+  let sendSanitizedButton = null;
+
+  // Which send actions the currently-displayed decision permits. This is the
+  // authority the click handlers check; button visibility alone is not enough
+  // to enforce it. The dialog host uses an open shadow root, so page scripts
+  // can reach the button nodes (and can hold a reference to a node from an
+  // earlier, permissive dialog), and a detached node still fires its listeners.
+  const actionState = {
+    canSendOriginal: false,
+    canSendSanitized: false
+  };
 
   /**
    * Escapes HTML for safe rendering.
@@ -80,12 +155,21 @@ export function createReviewDialog(handlers) {
   /**
    * Builds the issues list markup.
    *
+   * No ECI-derived entries are synthesised here. A ScanIssue is
+   * {entityType, value, score} - a concrete span of text that was detected -
+   * and an ECI flag has neither a span nor a value, so fitting one into that
+   * shape means inventing a value and passing it through
+   * resolveScanIssues()/normalizeIssueList(), which exist to normalise
+   * *detected text*. The ECI signal is rendered as itself, by renderEci().
+   *
    * @param {ScanIssue[]} issues
+   * @param {"context" | "unavailable" | "none"} eciExplanation
    * @returns {string}
    */
-  function renderIssues(issues) {
+  function renderIssues(issues, eciExplanation = "none") {
     if (!issues.length) {
-      return `<p class="empty-state">No specific issue details were returned by the scanner.</p>`;
+      const copy = ISSUES_EMPTY_STATE[eciExplanation] ?? ISSUES_EMPTY_STATE.none;
+      return `<p class="empty-state">${copy}</p>`;
     }
 
     return `
@@ -124,12 +208,7 @@ export function createReviewDialog(handlers) {
       return "";
     }
 
-    const isFallback =
-      eci.confidence === 0 &&
-      Array.isArray(eci.reasoning) &&
-      eci.reasoning.some((entry) => /fallback/i.test(String(entry)));
-
-    if (isFallback) {
+    if (describeEciExplanation(eci) === "unavailable") {
       // Defense in depth: the backend already caps fallback reasoning text
       // (see semantic_classifier.py's _truncate_reason()), but this popup
       // shouldn't depend on every backend caller getting that right - cap
@@ -259,6 +338,17 @@ export function createReviewDialog(handlers) {
           letter-spacing: 0.08em;
           text-transform: uppercase;
           color: #94a3b8;
+        }
+        /* Set when there are no detected spans, so this section carries the
+           whole explanation for the decision rather than supporting it. */
+        .section[data-primary="true"] {
+          padding: 14px;
+          border-radius: 14px;
+          background: rgba(167, 139, 250, 0.08);
+          border-left: 3px solid rgba(167, 139, 250, 0.55);
+        }
+        .section[data-primary="true"] .section-title {
+          color: #c4b5fd;
         }
         .prompt-box {
           margin: 0;
@@ -403,7 +493,7 @@ export function createReviewDialog(handlers) {
             <pre class="prompt-box" id="pg-review-sanitized"></pre>
           </div>
 
-          <div class="actions">
+          <div class="actions" id="pg-review-actions">
             <button type="button" class="secondary" id="pg-review-cancel">Cancel</button>
             <button type="button" class="danger" id="pg-review-send-original">Send Original</button>
             <button type="button" class="primary" id="pg-review-send-sanitized">Send Sanitized</button>
@@ -412,17 +502,28 @@ export function createReviewDialog(handlers) {
       </div>
     `;
 
+    actionsNode = shadow.getElementById("pg-review-actions");
+    sendOriginalButton = shadow.getElementById("pg-review-send-original");
+    sendSanitizedButton = shadow.getElementById("pg-review-send-sanitized");
+
+    // Cancel is unconditional - the user always has a way out of the dialog.
     shadow.getElementById("pg-review-cancel")?.addEventListener("click", () => {
       hide();
       handlers.onCancel();
     });
 
-    shadow.getElementById("pg-review-send-sanitized")?.addEventListener("click", () => {
+    sendSanitizedButton?.addEventListener("click", () => {
+      if (!actionState.canSendSanitized) {
+        return;
+      }
       hide();
       handlers.onSendSanitized();
     });
 
-    shadow.getElementById("pg-review-send-original")?.addEventListener("click", () => {
+    sendOriginalButton?.addEventListener("click", () => {
+      if (!actionState.canSendOriginal) {
+        return;
+      }
       hide();
       handlers.onSendOriginal();
     });
@@ -457,8 +558,6 @@ export function createReviewDialog(handlers) {
     const eciNode = shadow?.getElementById("pg-review-eci");
     const originalNode = shadow?.getElementById("pg-review-original");
     const sanitizedNode = shadow?.getElementById("pg-review-sanitized");
-    const sendSanitizedButton = shadow?.getElementById("pg-review-send-sanitized");
-    const sendOriginalButton = shadow?.getElementById("pg-review-send-original");
 
     if (titleNode) {
       titleNode.textContent =
@@ -479,12 +578,25 @@ export function createReviewDialog(handlers) {
       statusNode.innerHTML = `<span class="status-badge ${badgeClass}">${escapeHtml(status)}</span>`;
     }
 
+    // What the ECI section can explain decides how the issues panel words its
+    // empty state, so the two are computed from one value rather than each
+    // guessing at the payload independently.
+    const eciExplanation = describeEciExplanation(payload.eci);
+
     if (issuesNode) {
-      issuesNode.innerHTML = renderIssues(issues);
+      issuesNode.innerHTML = renderIssues(issues, eciExplanation);
     }
 
     if (eciSectionNode) {
       eciSectionNode.hidden = !payload.eci;
+      // When there are no detected spans, the ECI section is not supporting
+      // detail - it is the whole reason for the decision, so it is styled as
+      // the primary explanation instead of sitting below an apology.
+      if (issues.length === 0 && eciExplanation !== "none") {
+        eciSectionNode.setAttribute("data-primary", "true");
+      } else {
+        eciSectionNode.removeAttribute("data-primary");
+      }
     }
 
     if (eciNode) {
@@ -501,19 +613,41 @@ export function createReviewDialog(handlers) {
         : "No sanitized version was produced. You can cancel or send the original prompt.";
     }
 
-    if (sendSanitizedButton) {
-      sendSanitizedButton.hidden = !hasSanitizedChanges;
-      sendSanitizedButton.disabled = !hasSanitizedChanges;
-    }
+    // A policy BLOCK must not be sendable by ANY route. "Send Sanitized" used
+    // to be gated only on hasSanitizedChanges, so a BLOCKed prompt whose only
+    // masked span was incidental (an entity hit unrelated to the reason for the
+    // block) could still be transmitted in full with one substring replaced.
+    //
+    // Callers that reuse the BLOCK styling for something that is not a policy
+    // BLOCK opt out explicitly with allowOverride: true - see observer.js's
+    // composer-write fallback, which needs to leave the user a way to send.
+    const policyBlocked = status === "BLOCK" && payload.allowOverride !== true;
+    actionState.canSendOriginal =
+      !policyBlocked && (payload.allowOverride ?? status !== "BLOCK");
+    actionState.canSendSanitized = !policyBlocked && hasSanitizedChanges;
+
+    // Detach both send actions, then re-attach only the permitted ones. Doing
+    // it in this order keeps the row in its canonical order (Cancel, Send
+    // Original, Send Sanitized) and means a disallowed action is absent from
+    // the tree rather than merely hidden inside it.
+    sendOriginalButton?.remove();
+    sendSanitizedButton?.remove();
 
     if (sendOriginalButton) {
-      // Callers pass allowOverride explicitly for the real policy decision
-      // path (false only for an actual BLOCK) - defaulting to
-      // status !== "BLOCK" here only covers callers that don't pass it.
-      const overrideAllowed = payload.allowOverride ?? status !== "BLOCK";
-      sendOriginalButton.hidden = !overrideAllowed;
-      sendOriginalButton.disabled = !overrideAllowed;
+      sendOriginalButton.hidden = !actionState.canSendOriginal;
+      sendOriginalButton.disabled = !actionState.canSendOriginal;
       sendOriginalButton.textContent = "Send Original";
+      if (actionState.canSendOriginal) {
+        actionsNode?.appendChild(sendOriginalButton);
+      }
+    }
+
+    if (sendSanitizedButton) {
+      sendSanitizedButton.hidden = !actionState.canSendSanitized;
+      sendSanitizedButton.disabled = !actionState.canSendSanitized;
+      if (actionState.canSendSanitized) {
+        actionsNode?.appendChild(sendSanitizedButton);
+      }
     }
 
     if (host) {
@@ -525,6 +659,11 @@ export function createReviewDialog(handlers) {
    * Hides the review dialog.
    */
   function hide() {
+    // Revoke both send actions on the way out so a node reference captured
+    // while the dialog was open cannot be clicked after it closes.
+    actionState.canSendOriginal = false;
+    actionState.canSendSanitized = false;
+
     if (host) {
       host.style.display = "none";
     }

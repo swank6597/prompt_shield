@@ -2,7 +2,8 @@
 # TF-IDF scoring engine with inverted index for fast deterministic
 # prompt scoring against the enterprise knowledge base. Replaces the
 # naive token-overlap approach in keyword_search.py with proper term
-# weighting and high-frequency dampening (no manual stopword list).
+# weighting, high-frequency dampening, and an explicit stoplist (see
+# STOPWORDS below for why dampening alone was not sufficient).
 
 import math
 import os
@@ -21,12 +22,103 @@ import config  # noqa: E402
 log = get_logger("lexical_engine")
 
 
+# =============================================================================
+# Stoplist
+# =============================================================================
+# Why an explicit list at all, when this engine already dampens high-DF terms:
+# the dampening threshold (high_df_cutoff, 0.60) only fires for tokens present
+# in more than ~29 of the 48 knowledge documents. The corpus is declarative
+# documentation - specs and runbooks - so question words and doc/meta verbs
+# barely occur in it and therefore land at or near *maximum* IDF, where the
+# scorer cannot distinguish them from genuinely rare internal jargon.
+#
+# Measured on the real 48-document corpus (max attainable IDF = 3.8712):
+#
+#     what       df=1/48   idf=3.8712   <- ties the rarest real enterprise term
+#     how        df=1/48   idf=3.8712
+#     doc        df=1/48   idf=3.8712
+#     other      df=1/48   idf=3.8712
+#     does       df=2/48   idf=3.1781
+#     involved   df=2/48   idf=3.1781
+#     company    df=2/48   idf=3.1781
+#     can                  idf=2.4849
+#     reviewing  df=5/48   idf=2.2618
+#     level      df=10/48  idf=1.5686
+#     high       df=15/48  idf=1.1632
+#     mercury              idf=0.5390   <- an ACTUAL product name, ~7x lower
+#
+# So "What is GDPR?" outscored a prompt naming a dozen real internal systems.
+# The fix is lexical, not a threshold change: these tokens must not enter the
+# index or the query at all.
+#
+# The list is a module-level constant, and deliberately a *copy* of
+# keyword_search.STOPWORDS rather than an import of it. keyword_search.py is
+# retained only to serve the USE_LEGACY_SEARCH rollback path and is expected to
+# be deleted once that rollback is no longer needed; importing from it would
+# couple the live scoring path to a module on its way out, and would pull
+# keyword_search's module-level `from context_loader import load_knowledge_base`
+# into lexical_engine's import graph, which the tests import directly without
+# the ai/ directory necessarily on sys.path. The two lists are allowed to
+# diverge: this one is tuned for IDF weighting, that one for raw token overlap.
+#
+# Tokens of length <= 2 are dropped by _tokenize()'s length filter regardless;
+# the short entries below are kept so the list reads as a complete stoplist.
+STOPWORDS = frozenset({
+    # --- copied verbatim from keyword_search.STOPWORDS (origin, see above) ---
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "our", "my", "your", "their", "his", "her", "its", "to", "of", "in",
+    "on", "for", "and", "or", "this", "that", "these", "those", "explain",
+    "what", "how", "why", "does", "do", "did", "i", "we", "you", "it",
+    "with", "as", "at", "by", "from", "about",
+
+    # --- interrogatives and hedges (rare in declarative docs -> max IDF) ---
+    "which", "when", "where", "who", "whom", "whose",
+    "typically", "generally", "general", "roughly", "reasonable",
+
+    # --- doc/meta verbs: describe the request, not its subject ---
+    "detailed", "detail", "exactly", "summarize", "describe", "draft",
+    "review", "reviewing",
+
+    # --- generic relational / positional filler ---
+    "involved", "before", "after", "other", "others", "another",
+    "high", "level", "kind", "sort", "type",
+
+    # --- modals and politeness ---
+    "can", "could", "would", "should", "need", "needs", "want",
+    "help", "please", "tell", "show", "give",
+
+    # --- generic verbs and prepositions ---
+    "make", "made", "using", "used", "use", "into", "onto", "over",
+    "under", "than", "then", "there", "here", "also",
+
+    # --- quantifiers and negation ---
+    "such", "some", "any", "each", "both", "more", "most", "less",
+    "very", "much", "many", "not", "but",
+
+    # --- document/abstraction nouns ---
+    "doc", "docs", "document", "documents", "terms", "term",
+    "thing", "things", "way", "ways", "work", "works", "working",
+
+    # --- conversational filler ---
+    "get", "got", "know", "like", "just", "really",
+    "actual", "actually", "full", "new", "old", "same", "different",
+
+    # --- generic business vocabulary present in almost any phrasing ---
+    "between", "versus", "vers", "matter", "matters",
+    "processes", "process", "digital", "company", "companies",
+    "team", "teams", "target", "response", "time", "times",
+})
+
+
 @dataclass
 class LexicalConfig:
     """Configuration for the Lexical Engine thresholds."""
     public_threshold: float = config.TFIDF_PUBLIC_THRESHOLD
     enterprise_threshold: float = config.TFIDF_ENTERPRISE_THRESHOLD
     high_df_cutoff: float = 0.60  # tokens in >60% docs get near-zero IDF
+    # Saturation constant for magnitude normalization: score = raw / (raw + K).
+    # K is the raw score at which the normalized score reaches 0.5.
+    saturation_k: float = config.LEXICAL_SATURATION_K
 
 
 @dataclass
@@ -70,13 +162,20 @@ class LexicalEngine:
         """
         Tokenize text into lowercase alphanumeric tokens.
 
-        Uses regex [a-zA-Z][a-zA-Z0-9_-]+ to extract tokens, converts
-        to lowercase, and filters out tokens with length <= 2.
-        No stopword list — high-frequency suppression is handled by
-        IDF dampening.
+        Uses regex [a-zA-Z][a-zA-Z0-9_-]+ to extract tokens, converts to
+        lowercase, drops tokens with length <= 2, and drops STOPWORDS.
+
+        IDF dampening (high_df_cutoff) suppresses terms that are *common* in
+        the corpus; the stoplist suppresses terms that are common in English
+        but rare in this corpus, which dampening by construction cannot see.
+        See the STOPWORDS comment for the measured IDF values.
+
+        This is the single tokenization entry point for both _build_index()
+        and score(), so the stoplist is applied to the indexed corpus and to
+        the query identically and the IDF table stays consistent with it.
         """
         words = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]+", text.lower())
-        return [w for w in words if len(w) > 2]
+        return [w for w in words if len(w) > 2 and w not in STOPWORDS]
 
     def _build_index(self, documents: list[dict]) -> None:
         """
@@ -154,17 +253,28 @@ class LexicalEngine:
                     raw_score += tf * idf
                     matched_terms.append(token)
 
-        # Compute max possible score for normalization:
-        # Each unique prompt token contributes at most tf * max_idf
-        # where max_idf = log(N / 1) = log(N) (rarest possible term)
-        max_idf = math.log(self.num_docs) if self.num_docs > 1 else 1.0
-        max_score = sum(tf * max_idf for tf in prompt_tf.values())
-
-        # Normalize to 0.0-1.0
-        if max_score > 0.0:
-            normalized_score = min(raw_score / max_score, 1.0)
+        # Normalize to 0.0-1.0 by saturating magnitude, NOT by density.
+        #
+        # The previous formula divided raw_score by sum(tf * max_idf) over every
+        # prompt token. That denominator grows with total prompt length while
+        # only corpus-matching tokens raise the numerator, so the result was a
+        # density measure: rephrasing the same question more verbosely lowered
+        # its score, and a two-token generic question could reach 1.0 while a
+        # prompt naming a dozen real internal systems scored ~0.2.
+        #
+        # raw / (raw + K) instead measures accumulated evidence. It is strictly
+        # increasing in raw_score and bounded in [0.0, 1.0) for raw >= 0, K > 0,
+        # so more matched enterprise weight always means a higher score.
+        denominator = raw_score + self.config.saturation_k
+        if denominator > 0.0:
+            normalized_score = raw_score / denominator
         else:
+            # Only reachable if saturation_k is misconfigured to <= 0.
             normalized_score = 0.0
+
+        # Defensive clamp: guarantees the documented [0.0, 1.0] contract even
+        # if saturation_k is configured to a nonsensical (negative) value.
+        normalized_score = max(0.0, min(normalized_score, 1.0))
 
         # Determine verdict based on thresholds
         if normalized_score >= self.config.enterprise_threshold:

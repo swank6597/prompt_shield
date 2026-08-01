@@ -32,7 +32,15 @@ order (first match wins):
    - `PUBLIC` (score below `PROMPTSHIELD_TFIDF_PUBLIC_THRESHOLD`, default
      0.15) → skip (`pii_only` if PII was found, else `general_knowledge`)
    - `ENTERPRISE_LIKELY` (score at/above `PROMPTSHIELD_TFIDF_ENTERPRISE_THRESHOLD`,
-     default 0.45) → skip (`enterprise_detected`)
+     default 0.45) → **call the LLM** (`enterprise_lexical_needs_review`). This
+     used to skip the LLM and synthesize an ECI asserting
+     `containsInternalArchitecture` at `confidence: 0.9`, which `rules.json`
+     turns into an unreviewable BLOCK. A TF-IDF score is a retrieval signal
+     (the corpus documents OAuth 2.0 and GDPR, so generic questions about them
+     score highly too), not a disclosure judgement - so a high score now earns
+     the prompt an LLM review rather than deciding its outcome. See
+     [`../../specs/lexical-semantic-fix/plan.md`](../../specs/lexical-semantic-fix/plan.md)
+     Finding 1.
    - `AMBIGUOUS` (between the two thresholds) → escalate to the semantic tier
 5. **Semantic tier** (`semantic_engine.py`, only for `AMBIGUOUS` prompts) -
    embeds the prompt with a local `sentence-transformers` model
@@ -44,8 +52,7 @@ order (first match wins):
      (`semantic_confirmed_public`)
    - at/above `PROMPTSHIELD_HYBRID_ENTERPRISE_THRESHOLD` (default 0.55) →
      skip (`semantic_confirmed_enterprise`)
-   - otherwise → **call the LLM** (`true_ambiguity`) - the only path that
-     actually reaches ECI below
+   - otherwise → **call the LLM** (`true_ambiguity`)
 
 When a tier skips the LLM, `pre_classifier.py` builds a `pre_eci` dict
 (schema-shaped, matching `schema.json`) so `routes.py` and the Policy Engine
@@ -66,7 +73,8 @@ Full design/requirements/property-test spec:
 
 ## ECI: when the LLM actually gets called
 
-Only prompts on the `true_ambiguity` path reach this section. Runs against a
+Prompts on the `true_ambiguity`, `enterprise_lexical_needs_review`, and
+`engine_degraded` paths reach this section. Runs against a
 local Ollama model (`phi3:mini` by default - see `backend/config.py`) or a
 cloud provider via the Smart LLM Router (see `backend/README.md`), never the
 raw prompt (only the already-masked text from `presidio/`, plus - when

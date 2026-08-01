@@ -33,6 +33,17 @@ _init_audit_db()
 # concept from the original dashboard proposal. Any decision_path not
 # listed here (including NULL, for rows written before this column
 # existed) falls into "Unknown".
+#
+# Two entries are historical and kept deliberately so old audit rows still
+# resolve to a layer instead of "Unknown": "enterprise_detected" (the
+# lexical fast path removed by specs/lexical-semantic-fix task 2.1) and
+# "semantic_confirmed_enterprise" (the hybrid fast path removed by task
+# 3.3). Neither is emitted any more. Their replacements,
+# "enterprise_lexical_needs_review" and "enterprise_hybrid_needs_review",
+# are bucketed as "ECI (LLM)" rather than by the tier that raised the flag:
+# this map answers "which layer actually made the call", and on both of
+# those paths the pre-classifier only requests a review - the LLM's
+# classification is what the policy engine decides from.
 _LAYER_BY_DECISION_PATH = {
     "hard_block": "Presidio",
     "trivial": "Pre-Classifier (Lexical)",
@@ -42,6 +53,8 @@ _LAYER_BY_DECISION_PATH = {
     "engine_degraded": "Pre-Classifier (Lexical)",
     "semantic_confirmed_public": "Pre-Classifier (Semantic)",
     "semantic_confirmed_enterprise": "Pre-Classifier (Semantic)",
+    "enterprise_lexical_needs_review": "ECI (LLM)",
+    "enterprise_hybrid_needs_review": "ECI (LLM)",
     "true_ambiguity": "ECI (LLM)",
     "enterprise_ambiguous": "ECI (LLM)",
 }

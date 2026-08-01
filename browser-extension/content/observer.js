@@ -44,6 +44,11 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
     pendingReplay: null,
     pendingOriginalPrompt: null,
     pendingSanitizedPrompt: null,
+    // True when the pending decision was a policy BLOCK. Both send paths refuse
+    // while this is set: hiding the dialog buttons is not on its own sufficient,
+    // since the dialog host uses an open shadow root and a page script can
+    // reach - or retain - the button nodes.
+    pendingSendBlocked: false,
     sendButtonReadyLogged: false
   };
 
@@ -161,6 +166,7 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
     state.pendingReplay = null;
     state.pendingOriginalPrompt = null;
     state.pendingSanitizedPrompt = null;
+    state.pendingSendBlocked = false;
     state.sendAttemptInFlight = false;
   }
 
@@ -202,6 +208,11 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
    * @returns {Promise<boolean>}
    */
   async function sendSanitizedPrompt() {
+    if (state.pendingSendBlocked) {
+      Logger.warn("Send refused: the scan decision was BLOCK");
+      return false;
+    }
+
     const sanitizedPrompt = state.pendingSanitizedPrompt;
     if (!sanitizedPrompt) {
       Logger.warn("No sanitized prompt available to send");
@@ -235,6 +246,11 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
    * @returns {Promise<boolean>}
    */
   async function sendOriginalPrompt() {
+    if (state.pendingSendBlocked) {
+      Logger.warn("Send refused: the scan decision was BLOCK");
+      return false;
+    }
+
     if (state.pendingOriginalPrompt && state.promptTextArea) {
       detector.writePromptText(state.promptTextArea, state.pendingOriginalPrompt);
       await waitForComposerSync();
@@ -259,6 +275,8 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
     state.pendingReplay = createReplayAction();
     state.sendAttemptInFlight = false;
     state.pendingSanitizedPrompt = payload.sanitizedPrompt;
+    // Enforced again at the send sink, not just in the dialog's markup.
+    state.pendingSendBlocked = String(payload.status ?? "").toUpperCase() === "BLOCK";
 
     reviewDialog.show({
       status: payload.status,

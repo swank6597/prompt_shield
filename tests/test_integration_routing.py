@@ -296,31 +296,113 @@ class TestGeneralKnowledgePublic:
         assert policy_result["decision"] == "ALLOW"
 
 
-class TestEnterpriseLikelyDetected:
-    """Test: Lexical verdict ENTERPRISE_LIKELY routes to enterprise_detected."""
+class TestEnterpriseLikelyNeedsReview:
+    """
+    Test: Lexical verdict ENTERPRISE_LIKELY routes to the LLM for review.
 
-    def test_enterprise_likely_detected(self):
+    Renamed from TestEnterpriseLikelyDetected. "Detected" described the
+    behavior removed by specs/lexical-semantic-fix Task 2.1, where a TF-IDF
+    threshold crossing was treated as a detection rather than as a lead.
+    """
+
+    def test_enterprise_likely_routes_to_llm_review(self):
         """
         Lexical verdict ENTERPRISE_LIKELY should:
-        - Route via decision_path="enterprise_detected"
-        - NOT require LLM (needs_llm=False)
-        - Policy engine recognizes enterprise context (BLOCK or WARN)
+        - Route via decision_path="enterprise_lexical_needs_review"
+        - REQUIRE the LLM (needs_llm=True), carrying no pre-filled ECI
+        - Let the LLM's verdict, not the lexical score, drive the policy outcome
         """
         presidio_result = _build_presidio_result(None)
 
+        # The LLM is the reviewer here. Give it the answer a competent reviewer
+        # would return for a public-knowledge prompt that merely shares
+        # vocabulary with the corpus, so the test shows the review actually
+        # governs the outcome.
+        public_verdict_eci = {
+            "intent": "Other",
+            "documentType": "None",
+            "requiresEnterpriseKnowledge": False,
+            "containsInternalArchitecture": False,
+            "containsImplementationDetails": False,
+            "containsSourceCode": False,
+            "containsCustomerData": False,
+            "containsSecrets": False,
+            "impactsGDPR": False,
+            "impactsPCIDSS": False,
+            "impactsHIPAA": False,
+            "impactsISO27001": False,
+            "confidence": 0.91,
+            "reasoning": ["Generic protocol question, no enterprise specifics"],
+        }
+
         pre_result, policy_result, status = _run_full_pipeline(
-            prompt="How does the Mercury payment flow handle retries?",
+            prompt="In general terms, how does an OAuth 2.0 client_credentials grant work?",
             presidio_result=presidio_result,
             verdict="ENTERPRISE_LIKELY",
             tfidf_score=0.65,
             is_trivial=False,
+            llm_eci_result=public_verdict_eci,
         )
 
-        assert pre_result["decision_path"] == "enterprise_detected"
-        assert pre_result["needs_llm"] is False
-        # Enterprise detected -> policy should enforce restrictions
-        assert policy_result["decision"] in ("BLOCK", "WARN", "MASK")
-        assert status in ("BLOCK", "SANITIZE")
+        # WHY these expectations changed from enterprise_detected/needs_llm=False:
+        # A TF-IDF score is a retrieval signal - vocabulary overlap with the
+        # knowledge corpus - not a disclosure judgement. The corpus documents
+        # OAuth 2.0 and GDPR, so generic public questions about them score
+        # highly too: this exact prompt measured 0.7200, higher than every
+        # expected-BLOCK case in the suite. Crossing the threshold may earn a
+        # prompt an LLM review; it must not decide the outcome of that review.
+        assert pre_result["decision_path"] == "enterprise_lexical_needs_review"
+        assert pre_result["needs_llm"] is True
+
+        # WHY pre_eci must be None: the removed branch returned a synthetic ECI
+        # with containsInternalArchitecture=True at confidence=0.9, which
+        # rules.json blocks on at eci_min_confidence=0.7. One threshold
+        # crossing became a deterministic BLOCK that no reviewer saw.
+        assert pre_result["pre_eci"] is None
+
+        # And the consequence that matters end-to-end: with the reviewer saying
+        # "public", the same prompt that used to hard-BLOCK now lands SAFE.
+        # This is the assertion that inverts if Task 2.1 is reverted.
+        assert policy_result["decision"] == "ALLOW"
+        assert status == "SAFE"
+        assert "block_internal_architecture_or_code" not in policy_result["matchedRules"]
+
+    def test_enterprise_likely_still_blocks_when_llm_confirms(self):
+        """
+        The counterpart: routing to the LLM does not weaken enforcement. When
+        the reviewer confirms internal architecture, the BLOCK still happens -
+        it is now backed by a classification instead of by a score.
+        """
+        presidio_result = _build_presidio_result(None)
+
+        pre_result, policy_result, status = _run_full_pipeline(
+            prompt="How does the Mercury authorization pipeline call Orion Identity?",
+            presidio_result=presidio_result,
+            verdict="ENTERPRISE_LIKELY",
+            tfidf_score=0.65,
+            is_trivial=False,
+            llm_eci_result={
+                "intent": "Other",
+                "documentType": "Internal Documentation",
+                "requiresEnterpriseKnowledge": True,
+                "containsInternalArchitecture": True,
+                "containsImplementationDetails": True,
+                "containsSourceCode": False,
+                "containsCustomerData": False,
+                "containsSecrets": False,
+                "impactsGDPR": False,
+                "impactsPCIDSS": False,
+                "impactsHIPAA": False,
+                "impactsISO27001": True,
+                "confidence": 0.93,
+                "reasoning": ["Names internal systems and their call path"],
+            },
+        )
+
+        assert pre_result["decision_path"] == "enterprise_lexical_needs_review"
+        assert pre_result["needs_llm"] is True
+        assert policy_result["decision"] == "BLOCK"
+        assert status == "BLOCK"
 
 
 class TestTrueAmbiguityCallsLlm:
@@ -374,15 +456,80 @@ class TestTrueAmbiguityCallsLlm:
         assert policy_result["decision"] in ("BLOCK", "WARN", "MASK")
         assert status in ("BLOCK", "SANITIZE")
 
-    def test_ambiguous_below_public_threshold_skips_llm(self):
+    def test_ambiguous_below_public_threshold_routes_to_llm_review(self):
         """
-        If AMBIGUOUS verdict but hybrid score < HYBRID_PUBLIC_THRESHOLD,
-        should route to semantic_confirmed_public (no LLM needed).
+        A LOW hybrid score no longer skips the LLM at the configured default.
+
+        Renamed from test_ambiguous_below_public_threshold_skips_llm, which
+        asserted decision_path == "semantic_confirmed_public" and
+        needs_llm is False. That assertion encoded the behavior removed by
+        specs/lexical-semantic-fix Task 8.2, which set the default
+        HYBRID_PUBLIC_THRESHOLD to 0.0. Hybrid scores are >= 0 by construction,
+        so `hybrid_score < 0.0` is never true and the branch no longer fires.
+
+        ── Why the branch was disabled ──────────────────────────────────────
+        semantic_confirmed_public was the last path that skipped the LLM purely
+        on a retrieval score, and the only tier-2 path that skipped it at all.
+        Tasks 2.1 and 3.3 removed its two mirror images - the ones asserting
+        ENTERPRISE from a HIGH score - because TF-IDF and embedding similarity
+        are retrieval signals, not disclosure judgements. This branch made the
+        same category error in the safe direction: it concluded "this prompt
+        discloses nothing" from "this prompt does not resemble the corpus".
+
+        It survived those tasks only because it was unfalsifiable. Just 3 of the
+        original 15 suite cases reached tier 2 and all 3 were expected-ALLOW, so
+        no labelled case could contradict it. Task 8.1 grew the suite to 76
+        cases, 38 of which reach tier 2, 12 of them expected-BLOCK. Measured on
+        that suite, the hybrid score's ability to tell expected-BLOCK from
+        expected-ALLOW among tier-2 cases is indistinguishable from chance:
+        AUC 0.4872 over all labels, 0.5399 over the machine-generated subset,
+        and undefined on the human-authored baseline because no human-authored
+        BLOCK case reaches tier 2 at all. The semantic component alone scores
+        0.3782, slightly worse than a coin flip.
+
+        At the old 0.30 the branch fired 5 times in 76, and 2 of those 5 were
+        expected-BLOCK prompts proposing to hand data to an outsider (#75, a
+        conference bridge passcode; #76, interchange margin figures). Both score
+        low only because they use almost no corpus vocabulary. A no-LLM skip is
+        unrecoverable - nothing downstream re-examines the prompt.
+
+        ── What still covers the branch ─────────────────────────────────────
+        The threshold remains configurable, and setting
+        PROMPTSHIELD_HYBRID_PUBLIC_THRESHOLD to a positive value restores the
+        old routing. tests/test_hybrid_scoring.py's
+        test_hybrid_routing_with_configurable_thresholds generates
+        public_threshold over [0.01, 0.99] and asserts semantic_confirmed_public
+        below it, so the re-enabled arithmetic stays covered there (against a
+        pure mirror of the branch, not pre_classify itself).
+
+        What this test now asserts is the deployed default: a low hybrid score
+        earns a review rather than a verdict, and the reviewer's answer governs
+        the outcome. The prompt below is genuinely public, the mocked reviewer
+        says so, and the result is still SAFE - reached by review instead of by
+        assertion.
         """
         presidio_result = _build_presidio_result(None)
 
-        # Hybrid score = 0.4 * 0.10 + 0.6 * 0.20 = 0.04 + 0.12 = 0.16
-        # This is below HYBRID_PUBLIC_THRESHOLD (0.30) -> semantic_confirmed_public
+        public_verdict_eci = {
+            "intent": "Other",
+            "documentType": "None",
+            "requiresEnterpriseKnowledge": False,
+            "containsInternalArchitecture": False,
+            "containsImplementationDetails": False,
+            "containsSourceCode": False,
+            "containsCustomerData": False,
+            "containsSecrets": False,
+            "impactsGDPR": False,
+            "impactsPCIDSS": False,
+            "impactsHIPAA": False,
+            "impactsISO27001": False,
+            "confidence": 0.95,
+            "reasoning": ["General technical question, no enterprise context"],
+        }
+
+        # Hybrid score = 0.4 * 0.10 + 0.6 * 0.20 = 0.04 + 0.12 = 0.16.
+        # Below the OLD 0.30, which is the point: at the current default of 0.0
+        # there is no low-score skip, so this lands in the gray zone instead.
         pre_result, policy_result, status = _run_full_pipeline(
             prompt="What is a database index?",
             presidio_result=presidio_result,
@@ -390,34 +537,133 @@ class TestTrueAmbiguityCallsLlm:
             tfidf_score=0.10,
             is_trivial=False,
             semantic_score=0.20,
+            llm_eci_result=public_verdict_eci,
         )
 
-        assert pre_result["decision_path"] == "semantic_confirmed_public"
-        assert pre_result["needs_llm"] is False
+        assert pre_result["decision_path"] == "true_ambiguity"
+        assert pre_result["needs_llm"] is True
+        assert pre_result["hybrid_score"] == pytest.approx(0.16)
+        # The pre-classifier must not have pre-empted the review with a verdict.
+        assert pre_result["pre_eci"] is None
+        # Retrieval evidence is still carried forward for the reviewer and the
+        # audit trail, even though it no longer decides anything.
+        assert pre_result["semantic_result"] is not None
+        # Reviewer says public, so the outcome is SAFE - by review, not by score.
+        assert policy_result["decision"] == "ALLOW"
         assert status == "SAFE"
 
-    def test_ambiguous_above_enterprise_threshold_skips_llm(self):
+    def test_ambiguous_above_enterprise_threshold_routes_to_llm_review(self):
         """
         If AMBIGUOUS verdict but hybrid score >= HYBRID_ENTERPRISE_THRESHOLD,
-        should route to semantic_confirmed_enterprise (no LLM needed).
+        route to enterprise_hybrid_needs_review and let the LLM decide.
+
+        Renamed from test_ambiguous_above_enterprise_threshold_skips_llm. The
+        old name described the behavior removed by specs/lexical-semantic-fix
+        Task 3.3 and had become a misnomer.
         """
         presidio_result = _build_presidio_result(None)
 
         # Hybrid score = 0.4 * 0.80 + 0.6 * 0.85 = 0.32 + 0.51 = 0.83
-        # This is above HYBRID_ENTERPRISE_THRESHOLD (0.55) -> semantic_confirmed_enterprise
+        # Above HYBRID_ENTERPRISE_THRESHOLD (0.55) -> enterprise_hybrid_needs_review
+        #
+        # The reviewer is given the answer a competent one would return for a
+        # question that is merely ABOUT a documented topic, so the test shows
+        # the review actually governs the outcome rather than the score.
+        public_verdict_eci = {
+            "intent": "Other",
+            "documentType": "None",
+            "requiresEnterpriseKnowledge": False,
+            "containsInternalArchitecture": False,
+            "containsImplementationDetails": False,
+            "containsSourceCode": False,
+            "containsCustomerData": False,
+            "containsSecrets": False,
+            "impactsGDPR": False,
+            "impactsPCIDSS": False,
+            "impactsHIPAA": False,
+            "impactsISO27001": False,
+            "confidence": 0.90,
+            "reasoning": ["Conceptual policy question, no internal specifics disclosed"],
+        }
+
         pre_result, policy_result, status = _run_full_pipeline(
-            prompt="How does our Orion SSO handle token rotation?",
+            prompt="What are our three enterprise data classification levels?",
             presidio_result=presidio_result,
             verdict="AMBIGUOUS",
             tfidf_score=0.80,
             is_trivial=False,
             semantic_score=0.85,
+            llm_eci_result=public_verdict_eci,
         )
 
-        assert pre_result["decision_path"] == "semantic_confirmed_enterprise"
-        assert pre_result["needs_llm"] is False
-        # Enterprise detected -> policy should restrict
-        assert policy_result["decision"] in ("BLOCK", "WARN", "MASK")
+        # WHY these expectations changed from semantic_confirmed_enterprise /
+        # needs_llm=False: embedding similarity is a retrieval signal, exactly
+        # as TF-IDF is. A high cosine score against a corpus document means the
+        # prompt is ABOUT a documented topic, which is not evidence that
+        # answering it discloses anything. Two retrieval signals agreeing makes
+        # the retrieval more confident, not the disclosure judgement more valid.
+        # Measured: suite case #10 (expected ALLOW / WARN) hit hybrid=0.6846 and
+        # was deterministically BLOCKed at riskScore=54 the first time this path
+        # was ever reachable.
+        assert pre_result["decision_path"] == "enterprise_hybrid_needs_review"
+        assert pre_result["needs_llm"] is True
+
+        # WHY pre_eci must be None: the removed branch handed the policy engine
+        # a synthetic ECI from _build_enterprise_eci() with
+        # containsInternalArchitecture=True at confidence=0.9, which rules.json
+        # blocks on at eci_min_confidence=0.7. Since Task 3.3 that builder no
+        # longer exists.
+        assert pre_result["pre_eci"] is None
+
+        # The evidence is still carried forward for the LLM and the audit trail.
+        assert pre_result["hybrid_score"] is not None
+        assert pre_result["hybrid_score"] >= 0.55
+        assert pre_result["semantic_result"] is not None
+        assert pre_result["lexical_result"] is not None
+
+        # The consequence that matters end-to-end, and the assertion that
+        # inverts if Task 3.3 is reverted.
+        assert policy_result["decision"] == "ALLOW"
+        assert status == "SAFE"
+        assert "block_internal_architecture_or_code" not in policy_result["matchedRules"]
+
+    def test_hybrid_enterprise_still_blocks_when_llm_confirms(self):
+        """
+        The counterpart: routing to the LLM does not weaken enforcement. When
+        the reviewer confirms internal architecture on a high-hybrid prompt, the
+        BLOCK still happens - now backed by a classification, not by a score.
+        """
+        presidio_result = _build_presidio_result(None)
+
+        pre_result, policy_result, status = _run_full_pipeline(
+            prompt="Walk through how Token Vault detokenization is wired to Orion Identity internally.",
+            presidio_result=presidio_result,
+            verdict="AMBIGUOUS",
+            tfidf_score=0.80,
+            is_trivial=False,
+            semantic_score=0.85,
+            llm_eci_result={
+                "intent": "Other",
+                "documentType": "Internal Documentation",
+                "requiresEnterpriseKnowledge": True,
+                "containsInternalArchitecture": True,
+                "containsImplementationDetails": True,
+                "containsSourceCode": False,
+                "containsCustomerData": False,
+                "containsSecrets": False,
+                "impactsGDPR": False,
+                "impactsPCIDSS": False,
+                "impactsHIPAA": False,
+                "impactsISO27001": True,
+                "confidence": 0.93,
+                "reasoning": ["Requests the internal wiring between two named systems"],
+            },
+        )
+
+        assert pre_result["decision_path"] == "enterprise_hybrid_needs_review"
+        assert pre_result["needs_llm"] is True
+        assert policy_result["decision"] == "BLOCK"
+        assert status == "BLOCK"
 
 
 class TestGracefulDegradation:
@@ -575,17 +821,20 @@ class TestResponseStructure:
             "tfidf": 0.05,
         },
         {
-            "name": "enterprise_detected",
+            # Renamed from "enterprise_detected": since Task 2.1 this case
+            # routes to the LLM rather than skipping it. The response shape is
+            # asserted either way, which is the point of this test.
+            "name": "enterprise_lexical_needs_review",
             "is_trivial": False,
             "entities": None,
             "verdict": "ENTERPRISE_LIKELY",
             "tfidf": 0.70,
         },
     ])
-    def test_all_skip_paths_produce_valid_structure(self, path_config):
+    def test_all_decision_paths_produce_valid_structure(self, path_config):
         """
-        Every decision path that skips LLM should produce a valid response
-        with all required keys and sensible values.
+        Every decision path should produce a valid response with all required
+        keys and sensible values, whether it skips the LLM or routes to it.
         """
         presidio_result = _build_presidio_result(path_config["entities"])
 

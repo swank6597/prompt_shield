@@ -36,7 +36,11 @@ export function createChipInterceptor({ Logger, scanClient, reviewDialog, chipSe
     scanInFlight: false,
     pendingElement: null,
     pendingChipText: null,
-    pendingSanitizedText: null
+    pendingSanitizedText: null,
+    // True when the pending decision was a policy BLOCK. Both send handlers
+    // refuse while this is set, so the decision holds even if the dialog's
+    // buttons are reached directly (the dialog host uses an open shadow root).
+    pendingSendBlocked: false
   };
 
   /**
@@ -215,6 +219,8 @@ export function createChipInterceptor({ Logger, scanClient, reviewDialog, chipSe
     state.pendingElement = payload.element;
     state.pendingChipText = payload.chipText;
     state.pendingSanitizedText = payload.sanitizedPrompt;
+    // Enforced again in the send handlers, not just in the dialog's markup.
+    state.pendingSendBlocked = String(payload.status ?? "").toUpperCase() === "BLOCK";
 
     reviewDialog.show({
       status: payload.status,
@@ -243,6 +249,11 @@ export function createChipInterceptor({ Logger, scanClient, reviewDialog, chipSe
    * Handles "Send Original" — replays the original chip click.
    */
   function handleSendOriginal() {
+    if (state.pendingSendBlocked) {
+      Logger.warn("Chip review: send refused, the scan decision was BLOCK");
+      return;
+    }
+
     Logger.info("Chip review: sending original");
     reviewDialog.hide();
     const element = state.pendingElement;
@@ -258,6 +269,11 @@ export function createChipInterceptor({ Logger, scanClient, reviewDialog, chipSe
    * Falls back to "Send Original" if no input is available.
    */
   function handleSendSanitized() {
+    if (state.pendingSendBlocked) {
+      Logger.warn("Chip review: send refused, the scan decision was BLOCK");
+      return;
+    }
+
     Logger.info("Chip review: sending sanitized");
     reviewDialog.hide();
     const sanitizedText = state.pendingSanitizedText;
@@ -283,6 +299,7 @@ export function createChipInterceptor({ Logger, scanClient, reviewDialog, chipSe
     state.pendingElement = null;
     state.pendingChipText = null;
     state.pendingSanitizedText = null;
+    state.pendingSendBlocked = false;
     state.scanInFlight = false;
   }
 

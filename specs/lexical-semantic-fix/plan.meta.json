@@ -1,0 +1,425 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Replace length-normalization in `LexicalEngine.score()`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584869392
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584898519
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585140367
+      }
+    ],
+    "1.2 Add a stoplist to `LexicalEngine._tokenize()`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584870051
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585145102
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585470759
+      }
+    ],
+    "1.3 Re-run the existing property tests in `tests/test_lexical_engine.py`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584870573
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585475143
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585863465
+      }
+    ],
+    "2.1 Stop asserting high-confidence enterprise ECI on `ENTERPRISE_LIKELY`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584870993
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585868539
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785586334356
+      }
+    ],
+    "2.2 Confirm `tests/test_pre_classifier_routing.py` Property 6 expectations": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584871401
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785586339193
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785586874270
+      }
+    ],
+    "3.1 Install into the interpreter that actually serves the backend": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584871586
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785586878840
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785588057625
+      }
+    ],
+    "3.2 Repair `backend/venv`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584871717
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785588062027
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785590056463
+      }
+    ],
+    "3.3 Verify the semantic tier activates": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584871847
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785590061374
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785591507516
+      }
+    ],
+    "4.1 Fix `browser-extension/interstitial/review.js`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584872065
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785591513233
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785592518886
+      }
+    ],
+    "4.2 Apply the equivalent gate in `browser-extension/content/modal.js`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584872282
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785591518668
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785592524340
+      }
+    ],
+    "4.3 Verify against suite case #4": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584872401
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785592529376
+      }
+    ],
+    "5.1 Add a post-detection allowlist filter in `presidio_engine.py`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584872530
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785592535369
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785593319291
+      }
+    ],
+    "5.2 Source the allowlist from the knowledge corpus": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584872791
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785592541798
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785593324659
+      }
+    ],
+    "5.3 Regression-check real-name detection": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584872899
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785593330666
+      }
+    ],
+    "6.1 Cover generic compliance-framework questions": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873010
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785593336113
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785594937608
+      }
+    ],
+    "6.2 Cover generic organizational-process questions": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873113
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785593340812
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785594943029
+      }
+    ],
+    "6.3 Re-run cases #12 and #13 end-to-end": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873228
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785594947990
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596120335
+      }
+    ],
+    "7.1 Include ECI-derived findings in the scan response": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873343
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596125285
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596898347
+      }
+    ],
+    "7.2 Verify against suite case #8": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873464
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596903223
+      }
+    ],
+    "8.1 Grow `PromptShield_TestSuite.xlsx` to a meaningful sample": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873569
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596910130
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785598899176
+      }
+    ],
+    "8.2 Calibrate `TFIDF_*` thresholds and `LEXICAL_SATURATION_K`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873670
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785598905359
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785600731997
+      }
+    ],
+    "8.3 Add a regression harness that reports AUC and separation gap": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785584873837
+      },
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785600737739
+      },
+      {
+        "executionId": "1b3ba6f0-ad6b-4e95-91c3-85603b4751c3",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785602379593
+      },
+      {
+        "executionId": "1b3ba6f0-ad6b-4e95-91c3-85603b4751c3",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785602808834
+      }
+    ],
+    "1. Fix lexical scoring: normalization and stopwords as a single change": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785585863616
+      }
+    ],
+    "2. Remove the hardcoded-BLOCK fast path in `pre_classifier.py`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785586874330
+      }
+    ],
+    "3. Install the missing semantic dependencies": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785591507589
+      }
+    ],
+    "4. Gate Send Sanitized on BLOCK": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785592529441
+      }
+    ],
+    "5. Suppress product-name PERSON false positives in Presidio": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785593330733
+      }
+    ],
+    "6. Add few-shot examples to `system_prompt.md`": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596120403
+      }
+    ],
+    "7. Surface ECI reasons in the issues panel": [
+      {
+        "executionId": "9b2b5457-8371-42f8-b470-862a1a217dd2",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785596903294
+      }
+    ],
+    "8. Expand the labelled suite and calibrate thresholds": [
+      {
+        "executionId": "1b3ba6f0-ad6b-4e95-91c3-85603b4751c3",
+        "chatSessionId": "sess_eb6c1c76-32a0-4c48-b70e-4d973b0664e0",
+        "timestamp": 1785602808978
+      }
+    ]
+  }
+}

@@ -13,13 +13,19 @@
 #   TIER 1 — Lexical (TF-IDF):
 #     PII + PUBLIC verdict -> SKIP (pii_only)
 #     PUBLIC verdict, no PII -> SKIP (general_knowledge)
-#     ENTERPRISE_LIKELY verdict -> SKIP (enterprise_detected)
+#     ENTERPRISE_LIKELY verdict -> NEEDS LLM (enterprise_lexical_needs_review)
 #     AMBIGUOUS verdict -> proceed to Tier 2
 #
 #   TIER 2 — Semantic (hybrid scoring):
 #     hybrid_score < 0.30 -> SKIP (semantic_confirmed_public)
-#     hybrid_score >= 0.55 -> SKIP (semantic_confirmed_enterprise)
+#     hybrid_score >= 0.55 -> NEEDS LLM (enterprise_hybrid_needs_review)
 #     0.30 <= hybrid_score < 0.55 -> NEEDS LLM (true_ambiguity)
+#
+# Note that only ONE tier-2 outcome skips the LLM, and it is the one that
+# asserts SAFE. Both tiers route every enterprise-leaning signal to a reviewer:
+# TF-IDF and embedding similarity are both retrieval signals, and neither is
+# evidence that a prompt discloses anything. See the comments at the
+# ENTERPRISE_LIKELY and hybrid-enterprise branches for the full reasoning.
 #
 # Priority order: secrets > PII+PUBLIC > lexical verdict > semantic hybrid
 #
@@ -238,18 +244,58 @@ def pre_classify(prompt: str, masked_text: str, presidio_result: dict) -> dict:
             "hybrid_score": None,
         }
 
-    # ─── ENTERPRISE_LIKELY verdict -> enterprise_detected ────────────────────
+    # ─── ENTERPRISE_LIKELY verdict -> LLM review ─────────────────────────────
+    #
+    # This branch used to return needs_llm=False with a synthetic ECI that
+    # hardcoded containsInternalArchitecture=True at confidence=0.9. Since
+    # rules.json's block_internal_architecture_or_code fires on that flag at
+    # eci_min_confidence=0.7, a single lexical threshold crossing became a
+    # deterministic BLOCK that no LLM ever reviewed - the pre-classifier was
+    # asserting a verdict it has no evidence for. A TF-IDF score says "this
+    # prompt shares vocabulary with the knowledge base", which is a retrieval
+    # signal, not a disclosure judgement: the corpus documents OAuth 2.0 and
+    # GDPR, so generic questions about them score highly too. That amplified a
+    # scoring defect instead of containing it (see specs/lexical-semantic-fix,
+    # Finding 1).
+    #
+    # ENTERPRISE_LIKELY now routes to the LLM exactly as AMBIGUOUS does. The
+    # lexical score still earns the prompt a review; it no longer decides the
+    # outcome of that review.
+    #
+    # No TFIDF_HARD_ENTERPRISE_THRESHOLD fast path is offered here, because on
+    # the measured suite no value for one exists. Such a threshold must sit
+    # above every expected-ALLOW score and below every expected-BLOCK score.
+    # Scored on the Presidio-masked text this function actually sees, over the
+    # 10 non-secret suite cases:
+    #
+    #     expected BLOCK: #8 0.7004  #5 0.5961  #4 0.5307
+    #     expected ALLOW: #15 0.5508  #13 0.5200  #9 0.5140  #10 0.3781
+    #                     #12 0.2587  #14 0.2365  #11 0.1092
+    #
+    # The highest ALLOW (0.5508) is above the lowest BLOCK (0.5307), so the
+    # two classes still overlap at the top of the range and no single cut
+    # separates them. Even the near-miss reading - Presidio masks "Token Vault"
+    # to <PERSON> in #4, and unmasked it scores ~0.5542, a 0.0034 window above
+    # #15 - would be a value fitted to noise across 10 labelled cases, not
+    # evidence. A deterministic, unreviewable BLOCK needs overwhelming
+    # evidence; a sub-1% margin that inverts under masking is the opposite of
+    # that. Revisit only with the larger labelled set from task 8, and only if
+    # the measured distributions turn out to be separable by a wide margin.
     if lexical_result.verdict == "ENTERPRISE_LIKELY":
         log.info(
-            "Pre-classifier: SKIP (enterprise_detected, tfidf=%.4f, terms=%s)",
+            "Pre-classifier: NEEDS LLM (enterprise_lexical_needs_review, tfidf=%.4f, terms=%s)",
             lexical_result.tfidf_score,
             lexical_result.matched_terms[:5],
         )
         return {
-            "needs_llm": False,
-            "reason": f"Enterprise context detected via TF-IDF (score={lexical_result.tfidf_score:.4f})",
-            "decision_path": "enterprise_detected",
-            "pre_eci": _build_enterprise_eci(lexical_result),
+            "needs_llm": True,
+            "reason": (
+                f"Lexical overlap with enterprise knowledge base "
+                f"(score={lexical_result.tfidf_score:.4f} >= {config.TFIDF_ENTERPRISE_THRESHOLD}), "
+                f"routing to LLM for classification"
+            ),
+            "decision_path": "enterprise_lexical_needs_review",
+            "pre_eci": None,
             "knowledge_hits": knowledge_hits,
             "lexical_result": lexical_dict,
             "semantic_result": None,
@@ -315,14 +361,57 @@ def pre_classify(prompt: str, masked_text: str, presidio_result: dict) -> dict:
             "hybrid_score": hybrid_score,
         }
 
+    # ─── Hybrid above enterprise threshold -> LLM review ─────────────────────
+    #
+    # This branch used to return needs_llm=False with a synthetic ECI from
+    # _build_enterprise_eci() hardcoding containsInternalArchitecture=True at
+    # confidence=0.9, under decision_path 'semantic_confirmed_enterprise'. That
+    # is the same construct task 2.1 removed from the ENTERPRISE_LIKELY path -
+    # same builder, same hardcoded confidence, same resulting
+    # block_internal_architecture_or_code BLOCK at riskScore=54. It survived 2.1
+    # only because it was dead code at the time: SemanticEngine's dependencies
+    # were not installed, so AMBIGUOUS degraded straight to the LLM and this
+    # line never executed. Installing them (task 3.1) made it reachable, and it
+    # immediately hard-BLOCKed suite case #10 ("what are NovaBank's three
+    # enterprise data classification levels...", expected ALLOW / WARN) with no
+    # review: lex=0.3781 AMBIGUOUS, sem=0.8890, hybrid=0.6846.
+    #
+    # WHY agreement between the two signals does not license a verdict:
+    # semantic similarity is a RETRIEVAL signal, exactly like TF-IDF. MiniLM
+    # scores #10 high against data-classification.md because the question
+    # genuinely *is about* a documented topic - that is the embedding working
+    # correctly. Asserting containsInternalArchitecture from "this resembles a
+    # document we have" is the same category error as asserting it from
+    # vocabulary overlap. Two retrieval signals agreeing makes the retrieval
+    # more confident, not the disclosure judgement more valid; a prompt can only
+    # be *about* a documented topic and still disclose nothing.
+    #
+    # WHY not retune the thresholds instead: #10 clears
+    # HYBRID_ENTERPRISE_THRESHOLD by +0.1346, so no small adjustment reaches it,
+    # and picking a value to dodge one labelled case is fitting to a single
+    # datapoint - the same objection recorded in the ENTERPRISE_LIKELY comment
+    # above. Threshold calibration belongs to task 8.2 with a larger labelled
+    # set.
+    #
+    # The hybrid score still earns the prompt a review, and lexical_result,
+    # semantic_result and hybrid_score are all carried forward so the LLM gets
+    # the retrieved context and the audit trail keeps the evidence. It no longer
+    # decides the outcome of that review.
     if hybrid_score >= config.HYBRID_ENTERPRISE_THRESHOLD:
-        # Semantic confirmed enterprise
-        log.info("Pre-classifier: SKIP (semantic_confirmed_enterprise, hybrid=%.4f)", hybrid_score)
+        log.info(
+            "Pre-classifier: NEEDS LLM (enterprise_hybrid_needs_review, hybrid=%.4f >= %.2f)",
+            hybrid_score,
+            config.HYBRID_ENTERPRISE_THRESHOLD,
+        )
         return {
-            "needs_llm": False,
-            "reason": f"Hybrid score above enterprise threshold (hybrid={hybrid_score:.4f} >= {config.HYBRID_ENTERPRISE_THRESHOLD})",
-            "decision_path": "semantic_confirmed_enterprise",
-            "pre_eci": _build_enterprise_eci(lexical_result),
+            "needs_llm": True,
+            "reason": (
+                f"Hybrid score above enterprise threshold "
+                f"(hybrid={hybrid_score:.4f} >= {config.HYBRID_ENTERPRISE_THRESHOLD}), "
+                f"routing to LLM for classification"
+            ),
+            "decision_path": "enterprise_hybrid_needs_review",
+            "pre_eci": None,
             "knowledge_hits": knowledge_hits,
             "lexical_result": lexical_dict,
             "semantic_result": semantic_dict,
@@ -497,27 +586,16 @@ def _build_pii_only_eci(entity_types: set) -> dict:
     }
 
 
-def _build_enterprise_eci(lexical_result) -> dict:
-    """Enterprise context detected via lexical/hybrid scoring."""
-    top_doc = lexical_result.top_docs[0]["filename"] if lexical_result.top_docs else "unknown"
-    return {
-        "intent": "Other",
-        "documentType": "Internal Documentation",
-        "requiresEnterpriseKnowledge": True,
-        "containsInternalArchitecture": True,
-        "containsImplementationDetails": True,
-        "containsSourceCode": False,
-        "containsCustomerData": False,
-        "containsSecrets": False,
-        "impactsGDPR": False,
-        "impactsPCIDSS": False,
-        "impactsHIPAA": False,
-        "impactsISO27001": True,
-        "confidence": 0.9,
-        "reasoning": [
-            f"Enterprise context detected (TF-IDF score={lexical_result.tfidf_score:.4f}, "
-            f"verdict={lexical_result.verdict})",
-            f"Top matching document: {top_doc}",
-            f"Matched terms: {', '.join(lexical_result.matched_terms[:10])}",
-        ],
-    }
+# _build_enterprise_eci() was DELETED by specs/lexical-semantic-fix task 3.3.
+#
+# Its whole purpose was to synthesise a high-confidence enterprise verdict
+# (containsInternalArchitecture=True, containsImplementationDetails=True,
+# confidence=0.9) out of a retrieval score. Both paths that called it -
+# ENTERPRISE_LIKELY (removed in task 2.1) and the hybrid enterprise branch
+# (removed in task 3.3) - now route to the LLM instead, so it had no callers
+# left. It is deleted rather than kept unused: an unused constructor for exactly
+# the ECI shape that trips rules.json's block_internal_architecture_or_code at
+# eci_min_confidence=0.7 is an invitation to reintroduce the defect on the next
+# fast path someone adds. Any future no-LLM enterprise verdict should have to
+# justify its own confidence value from measured data, not inherit a hardcoded
+# 0.9 from here.

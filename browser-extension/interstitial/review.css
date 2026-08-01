@@ -101,6 +101,19 @@ h1 {
   color: #94a3b8;
 }
 
+/* Set by review.js when there are no detected spans, so this section carries
+   the whole explanation for the decision rather than supporting it. */
+.section[data-primary="true"] {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(167, 139, 250, 0.08);
+  border-left: 3px solid rgba(167, 139, 250, 0.55);
+}
+
+.section[data-primary="true"] .section-title {
+  color: #c4b5fd;
+}
+
 .prompt-box {
   margin: 0;
   padding: 12px 14px;

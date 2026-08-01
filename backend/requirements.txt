@@ -27,4 +27,5 @@ sentence-transformers==3.4.1    # Local embedding model (all-MiniLM-L6-v2)
 faiss-cpu==1.14.3               # FAISS vector similarity search (CPU-only)
 
 # --- Testing (dev/test only) ---
+pytest==8.4.2                   # Test runner for tests/
 hypothesis==6.119.2             # Property-based testing framework

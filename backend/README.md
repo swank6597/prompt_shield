@@ -86,9 +86,9 @@ The remaining variables tune the pre-classifier and are documented inline in `.e
 | Group | Variables |
 |---|---|
 | Presidio | `PROMPTSHIELD_PRESIDIO_MIN_SCORE` *(currently unused — `presidio_engine.py` hardcodes its own `MIN_SCORE`, see Known Limitations)* |
-| Lexical engine (TF-IDF) | `PROMPTSHIELD_TFIDF_PUBLIC_THRESHOLD` (0.15), `PROMPTSHIELD_TFIDF_ENTERPRISE_THRESHOLD` (0.45) |
+| Lexical engine (TF-IDF) | `PROMPTSHIELD_TFIDF_PUBLIC_THRESHOLD` (0.15), `PROMPTSHIELD_TFIDF_ENTERPRISE_THRESHOLD` (0.45), `PROMPTSHIELD_LEXICAL_SATURATION_K` (12.0) |
 | Semantic engine (FAISS) | `PROMPTSHIELD_EMBEDDING_MODEL` (`all-MiniLM-L6-v2`), `PROMPTSHIELD_SEMANTIC_CHUNK_SIZE` (500) |
-| Hybrid scoring | `PROMPTSHIELD_HYBRID_LEXICAL_WEIGHT` (0.4), `PROMPTSHIELD_HYBRID_SEMANTIC_WEIGHT` (0.6), `PROMPTSHIELD_HYBRID_PUBLIC_THRESHOLD` (0.30), `PROMPTSHIELD_HYBRID_ENTERPRISE_THRESHOLD` (0.55) |
+| Hybrid scoring | `PROMPTSHIELD_HYBRID_LEXICAL_WEIGHT` (0.4), `PROMPTSHIELD_HYBRID_SEMANTIC_WEIGHT` (0.6), `PROMPTSHIELD_HYBRID_PUBLIC_THRESHOLD` (0.0 — branch disabled, see the pre-classifier section), `PROMPTSHIELD_HYBRID_ENTERPRISE_THRESHOLD` (0.55 — audit label only, both arms call the LLM) |
 | Ollama | `PROMPTSHIELD_OLLAMA_HOST`, `PROMPTSHIELD_OLLAMA_TIMEOUT`, `PROMPTSHIELD_OLLAMA_MAX_RETRIES` |
 | Groq / Gemini / Bedrock | `PROMPTSHIELD_GROQ_MODEL`/`_TIMEOUT`, `PROMPTSHIELD_GEMINI_MODEL`/`_TIMEOUT`, `PROMPTSHIELD_BEDROCK_REGION`/`_MODEL_ID`/`_TIMEOUT` |
 | Auto-routing | `PROMPTSHIELD_LLM_AUTO_LENGTH_THRESHOLD` (50), `PROMPTSHIELD_LLM_AUTO_ENTITY_THRESHOLD` (3) |
@@ -103,14 +103,16 @@ Before any LLM call is considered, `ai/pre_classifier.py` runs a fast, determini
 2. **Secrets check** — any secret entity type (`GITHUB_TOKEN`, `OPENAI_API_KEY`, `AWS_ACCESS_KEY`, `AWS_SECRET_KEY`, `PRIVATE_KEY`, `JWT_TOKEN`) skips the LLM and goes straight to a hard-block decision (`decision_path=hard_block`)
 3. **Lexical tier** (`ai/lexical_engine.py`) — an in-memory TF-IDF inverted index built from `knowledge/` at startup scores the prompt in under 1ms:
    - `PUBLIC` (score `< PROMPTSHIELD_TFIDF_PUBLIC_THRESHOLD`, default 0.15) → skip LLM (`pii_only` if PII was found, else `general_knowledge`)
-   - `ENTERPRISE_LIKELY` (score `>= PROMPTSHIELD_TFIDF_ENTERPRISE_THRESHOLD`, default 0.45) → skip LLM (`enterprise_detected`)
+   - `ENTERPRISE_LIKELY` (score `>= PROMPTSHIELD_TFIDF_ENTERPRISE_THRESHOLD`, default 0.45) → **call the LLM** (`enterprise_lexical_needs_review`)
    - `AMBIGUOUS` (in between) → escalate to the semantic tier
 4. **Semantic tier** (`ai/semantic_engine.py`, only for `AMBIGUOUS` prompts) — embeds the prompt with a local `sentence-transformers` model and searches a FAISS index of chunked `knowledge/` docs (~50ms), then computes a hybrid score: `PROMPTSHIELD_HYBRID_LEXICAL_WEIGHT * tfidf + PROMPTSHIELD_HYBRID_SEMANTIC_WEIGHT * semantic`
-   - `< PROMPTSHIELD_HYBRID_PUBLIC_THRESHOLD` (default 0.30) → skip LLM (`semantic_confirmed_public`)
-   - `>= PROMPTSHIELD_HYBRID_ENTERPRISE_THRESHOLD` (default 0.55) → skip LLM (`semantic_confirmed_enterprise`)
-   - otherwise → **call the LLM** (`true_ambiguity` — the only path that reaches ECI/the LLM Router)
+   - `>= PROMPTSHIELD_HYBRID_ENTERPRISE_THRESHOLD` (default 0.55) → **call the LLM** (`enterprise_hybrid_needs_review`)
+   - otherwise → **call the LLM** (`true_ambiguity`)
+   - `< PROMPTSHIELD_HYBRID_PUBLIC_THRESHOLD` → skip LLM (`semantic_confirmed_public`). **Disabled by default** since task 8.2 of [`../specs/lexical-semantic-fix/plan.md`](../specs/lexical-semantic-fix/plan.md) set the default to `0.0`; hybrid scores are never negative, so the branch never fires. Set it to a positive value to re-enable.
 
-This is what actually keeps the LLM call rate low, not just the trivial-prompt check. Setting `PROMPTSHIELD_USE_LEGACY_SEARCH=true` reverts to the older raw-token-overlap scoring in `keyword_search.py` (kept for rollback) instead of the lexical/semantic engines. The FAISS index and chunk metadata are persisted to `ai/index/` (git-ignored) and only rebuilt when a `knowledge/` file's modification time changes. See [`ai/README.md`](ai/README.md) and [`../specs/lexical-semantic-upgrade/design.md`](../specs/lexical-semantic-upgrade/design.md) for full design details.
+Note what tiers 3 and 4 do **not** do: no score on its own produces a verdict. A high TF-IDF or hybrid score earns the prompt an LLM review, it does not decide the review's outcome. Both retrieval-score fast paths that used to skip the LLM with a synthetic "enterprise" classification (`enterprise_detected`, `semantic_confirmed_enterprise`) were removed by tasks 2.1 and 3.3 of the same plan, and `semantic_confirmed_public` — the mirror image, asserting *safe* from a low score — was disabled by task 8.2. Those path names survive only in `dashboard/queries.py`'s layer map so historical audit rows still resolve.
+
+The LLM call rate is therefore held down by the `trivial`, `hard_block`, `pii_only` and `general_knowledge` fast paths, all of which rest on something stronger than a similarity score. Setting `PROMPTSHIELD_USE_LEGACY_SEARCH=true` reverts to the older raw-token-overlap scoring in `keyword_search.py` (kept for rollback) instead of the lexical/semantic engines. The FAISS index and chunk metadata are persisted to `ai/index/` (git-ignored) and only rebuilt when a `knowledge/` file's modification time changes. See [`ai/README.md`](ai/README.md) and [`../specs/lexical-semantic-upgrade/design.md`](../specs/lexical-semantic-upgrade/design.md) for full design details.
 
 ## Smart LLM Router
 

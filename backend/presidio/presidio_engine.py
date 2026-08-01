@@ -10,6 +10,7 @@
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 
+from presidio.product_names import is_product_name
 from presidio.recognizers.registry import register_all
 from utils.logger import get_logger
 
@@ -50,6 +51,37 @@ def _resolve_overlaps(results: list) -> list:
     return kept
 
 
+def _drop_product_name_persons(results: list, text: str) -> list:
+    """
+    Drops PERSON detections whose span is, in full, a known enterprise product
+    or platform name (see product_names.py for where that list comes from).
+
+    spaCy's built-in NER labels 'Token Vault' PERSON at score 0.8500 - the exact
+    same score the real name 'Rajesh Kumar' gets - so MIN_SCORE cannot separate
+    them and the value has to be recognised by name.
+
+    Scoped to PERSON deliberately. A product name is not a reason to suppress a
+    GITHUB_TOKEN, AADHAAR_NUMBER or any other entity that happens to occupy the
+    same span; those recognizers match on structure, not on capitalisation, so a
+    hit from one is evidence of something the NER's guess is not.
+    """
+    kept, suppressed = [], []
+    for r in results:
+        if r.entity_type == "PERSON" and is_product_name(text[r.start:r.end]):
+            suppressed.append(r)
+        else:
+            kept.append(r)
+
+    if suppressed:
+        log.debug(
+            "Suppressed %d PERSON detection(s) matching a known product/system "
+            "name: %s",
+            len(suppressed),
+            [(text[r.start:r.end], round(r.score, 2)) for r in suppressed],
+        )
+    return kept
+
+
 def analyze_text(text: str) -> dict:
     """
     Runs Presidio analysis + anonymization on the given text.
@@ -81,6 +113,14 @@ def analyze_text(text: str) -> dict:
             [(r.entity_type, round(r.score, 2)) for r in below_threshold],
         )
     results = [r for r in results if r.score >= MIN_SCORE]
+
+    # Product-name PERSON false positives, dropped BEFORE overlap resolution so
+    # that anonymize() below and the `entities` list returned to routes.py are
+    # built from the identical set: filtering later would mask a span that is
+    # not reported as an issue. Ordering also matters against _resolve_overlaps:
+    # a suppressed PERSON must not be allowed to win an overlap first and take a
+    # real, structurally-matched entity down with it.
+    results = _drop_product_name_persons(results, text)
 
     deduped = _resolve_overlaps(results)
     dropped_overlaps = len(results) - len(deduped)

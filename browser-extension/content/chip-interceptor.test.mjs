@@ -490,6 +490,81 @@ assert.ok(
   assert.strictEqual(dialogCalls[0].payload.allowOverride, false, "BLOCK should not allow override");
 }
 
+// --- Test: on BLOCK, the send callbacks refuse even when invoked directly ---
+//
+// The dialog buttons are gated in modal.js, but the callbacks handed to the
+// dialog are the actual sink. This invokes them without going through a button
+// to confirm the BLOCK is enforced there too.
+
+{
+  const { interceptor, doc, dialogCalls, logs } = createTestInterceptor({
+    status: "BLOCK",
+    reason: "Internal architecture disclosure",
+    sanitizedPrompt: "Blocked content with <PERSON> masked",
+    issues: [{ entityType: "PERSON", value: "Token Vault", score: 0.85 }]
+  });
+  interceptor.start();
+
+  const chipElement = new MockElement("button", {
+    "data-followup-text": "Blocked content with Token Vault",
+    _innerText: "Blocked"
+  });
+  chipElement._document = doc;
+
+  const event = new MockEvent("click", chipElement);
+  doc._dispatchCapture("click", event);
+
+  await new Promise((r) => setTimeout(r, 10));
+
+  const { onSendSanitized, onSendOriginal } = dialogCalls[0].payload;
+
+  onSendSanitized();
+  onSendOriginal();
+
+  assert.strictEqual(
+    chipElement.clickCount,
+    0,
+    "A BLOCKed chip must not be replayed by either send callback"
+  );
+  assert.strictEqual(
+    dialogCalls.filter((call) => call.action === "hide").length,
+    0,
+    "A refused send should not close the dialog"
+  );
+  assert.strictEqual(
+    logs.filter((l) => l.msg.includes("send refused")).length,
+    2,
+    "Both send callbacks should log a refusal on BLOCK"
+  );
+}
+
+// --- Test: on SANITIZE, Send Original still replays the chip click ---
+
+{
+  const { interceptor, doc, dialogCalls } = createTestInterceptor({
+    status: "SANITIZE",
+    reason: "Detected 1 sensitive item(s): EMAIL_ADDRESS",
+    sanitizedPrompt: "Contact me at <EMAIL_ADDRESS>",
+    issues: [{ entityType: "EMAIL_ADDRESS", value: "test@example.com" }]
+  });
+  interceptor.start();
+
+  const chipElement = new MockElement("button", {
+    "data-followup-text": "Contact me at test@example.com",
+    _innerText: "Contact"
+  });
+  chipElement._document = doc;
+
+  const event = new MockEvent("click", chipElement);
+  doc._dispatchCapture("click", event);
+
+  await new Promise((r) => setTimeout(r, 10));
+
+  dialogCalls[0].payload.onSendOriginal();
+
+  assert.strictEqual(chipElement.clickCount, 1, "SANITIZE should still allow Send Original");
+}
+
 // --- Test: scan failure allows click through ---
 
 {

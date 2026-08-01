@@ -15,6 +15,63 @@ const ECI_FLAGS = [
   ["containsSecrets", "Possible Secrets"]
 ];
 
+// Empty-state copy for the Detected Issues panel.
+//
+// The panel is fed from Presidio entity spans, so a decision driven purely by
+// enterprise-context analysis has nothing to list - entityCount is 0 while the
+// ECI flags and the policy reason carry the whole explanation. The old single
+// string ("no details were returned") was wrong in that case: details *were*
+// returned, just not as detected spans, and they are already on screen in the
+// AI Context Analysis section directly below. Saying nothing came back
+// contradicts that section and reads as a scanner malfunction on a decision
+// that is entirely correct.
+//
+// Kept character-identical to ISSUES_EMPTY_STATE in content/modal.js - both
+// surfaces render the same decision and must word it the same way.
+// review.test.mjs asserts they match.
+const ISSUES_EMPTY_STATE = {
+  context:
+    "No individual values were flagged in the text itself. This decision was driven by the enterprise-context analysis below.",
+  unavailable:
+    "No individual values were flagged in the text itself, and the context classifier could not complete its analysis, so this was held for review out of caution.",
+  none: "No specific issue details were returned by the scanner."
+};
+
+/**
+ * Classifies what, if anything, the ECI section is able to explain. Single
+ * source of truth for the fallback test, so the issues panel and the ECI
+ * section can never disagree about whether the classifier actually ran.
+ *
+ *  - "unavailable": the classifier fell back (unreachable provider, or output
+ *    that failed validation). Its all-false flags and 0% confidence are
+ *    defaults, not an assessment, so they must not be read as findings.
+ *  - "context": the classifier ran and returned something that explains the
+ *    decision - a raised flag, or reasoning describing what it saw.
+ *  - "none": no ECI at all, or an assessment that raised nothing.
+ *
+ * @param {object | undefined} eci
+ * @returns {"context" | "unavailable" | "none"}
+ */
+function describeEciExplanation(eci) {
+  if (!eci) {
+    return "none";
+  }
+
+  const isFallback =
+    eci.confidence === 0 &&
+    Array.isArray(eci.reasoning) &&
+    eci.reasoning.some((entry) => /fallback/i.test(String(entry)));
+
+  if (isFallback) {
+    return "unavailable";
+  }
+
+  const hasFlags = ECI_FLAGS.some(([key]) => eci[key]);
+  const hasReasoning = Array.isArray(eci.reasoning) && eci.reasoning.length > 0;
+
+  return hasFlags || hasReasoning ? "context" : "none";
+}
+
 /**
  * Escapes HTML to prevent XSS in rendered content.
  * @param {string} str
@@ -64,12 +121,21 @@ function showErrorState() {
 
 /**
  * Renders the detected issues list.
+ *
+ * No ECI-derived entries are synthesised here. An issue is
+ * {entityType, value, score} - a concrete span of text that was detected -
+ * and an ECI flag has neither a span nor a value, so fitting one into that
+ * shape means inventing a value. The ECI signal is rendered as itself, by
+ * renderEci().
+ *
  * @param {Array<{entityType: string, value: string, score?: number}>} issues
+ * @param {"context" | "unavailable" | "none"} eciExplanation
  * @returns {string}
  */
-function renderIssues(issues) {
+function renderIssues(issues, eciExplanation = "none") {
   if (!issues || issues.length === 0) {
-    return `<p class="empty-state">No specific issue details were returned by the scanner.</p>`;
+    const copy = ISSUES_EMPTY_STATE[eciExplanation] ?? ISSUES_EMPTY_STATE.none;
+    return `<p class="empty-state">${copy}</p>`;
   }
 
   return `
@@ -101,13 +167,7 @@ function renderIssues(issues) {
 function renderEci(eci) {
   if (!eci) return "";
 
-  // Detect fallback state
-  const isFallback =
-    eci.confidence === 0 &&
-    Array.isArray(eci.reasoning) &&
-    eci.reasoning.some((entry) => /fallback/i.test(String(entry)));
-
-  if (isFallback) {
+  if (describeEciExplanation(eci) === "unavailable") {
     return `<p class="empty-state">AI context analysis unavailable (${escapeHtml(
       eci.reasoning?.[0] ?? "classifier fallback"
     )}).</p>`;
@@ -229,10 +289,15 @@ async function init() {
         : "Review the detected issues below and choose how to proceed.");
   }
 
+  // What the ECI section can explain decides how the issues panel words its
+  // empty state, so the two are computed from one value rather than each
+  // guessing at the scan result independently.
+  const eciExplanation = describeEciExplanation(eci);
+
   // Render issues
   const issuesEl = document.getElementById("review-issues");
   if (issuesEl) {
-    issuesEl.innerHTML = renderIssues(issues);
+    issuesEl.innerHTML = renderIssues(issues, eciExplanation);
   }
 
   // Render ECI section
@@ -242,6 +307,14 @@ async function init() {
     if (eci) {
       eciSection.hidden = false;
       eciEl.innerHTML = renderEci(eci);
+      // When there are no detected spans, this section is not supporting
+      // detail - it is the whole reason for the decision, so it is styled as
+      // the primary explanation instead of sitting below an apology.
+      if (issues.length === 0 && eciExplanation !== "none") {
+        eciSection.setAttribute("data-primary", "true");
+      } else {
+        eciSection.removeAttribute("data-primary");
+      }
     } else {
       eciSection.hidden = true;
     }
@@ -261,21 +334,22 @@ async function init() {
       : "No sanitized version was produced.";
   }
 
-  // Configure action buttons visibility
+  // Configure action availability.
+  //
+  // A BLOCK decision must not be sendable by ANY route. "Send Sanitized" used
+  // to be gated only on whether sanitization changed anything, so a BLOCKed
+  // query whose only masked span was incidental (a single entity hit that had
+  // nothing to do with the reason for the block) could still be transmitted in
+  // full with one substring replaced. Both send actions are now gated on the
+  // decision itself.
+  const isBlocked = status === "BLOCK";
+  const canSendOriginal = !isBlocked;
+  const canSendSanitized = !isBlocked && hasSanitizedChanges;
+
   const btnSendOriginal = document.getElementById("btn-send-original");
   const btnSendSanitized = document.getElementById("btn-send-sanitized");
 
-  if (btnSendOriginal) {
-    // Hide "Send Original" on BLOCK status
-    btnSendOriginal.hidden = status === "BLOCK";
-  }
-
-  if (btnSendSanitized) {
-    // Hide "Send Sanitized" if there are no sanitized changes
-    btnSendSanitized.hidden = !hasSanitizedChanges;
-  }
-
-  // Wire action buttons
+  // Cancel is always wired - the user must always have a way out of this page.
   const btnCancel = document.getElementById("btn-cancel");
   if (btnCancel) {
     btnCancel.addEventListener("click", () => {
@@ -283,16 +357,27 @@ async function init() {
     });
   }
 
-  if (btnSendOriginal) {
-    btnSendOriginal.addEventListener("click", () => {
-      handleSendOriginal(tabId, originalUrl);
-    });
+  // Defense in depth: a disallowed action is removed from the document AND its
+  // click handler is never attached, so there is no hidden-but-focusable
+  // element and no listener left to reach.
+  if (canSendOriginal) {
+    if (btnSendOriginal) {
+      btnSendOriginal.addEventListener("click", () => {
+        handleSendOriginal(tabId, originalUrl);
+      });
+    }
+  } else {
+    disableAction(btnSendOriginal);
   }
 
-  if (btnSendSanitized) {
-    btnSendSanitized.addEventListener("click", () => {
-      handleSendSanitized(tabId, sanitizedQuery);
-    });
+  if (canSendSanitized) {
+    if (btnSendSanitized) {
+      btnSendSanitized.addEventListener("click", () => {
+        handleSendSanitized(tabId, sanitizedQuery);
+      });
+    }
+  } else {
+    disableAction(btnSendSanitized);
   }
 
   // Clean up scan data from session storage after rendering
@@ -301,6 +386,22 @@ async function init() {
   } catch (err) {
     console.warn("[PromptShield] Failed to clean up scan data:", err);
   }
+}
+
+/**
+ * Takes an action button out of play: hidden, disabled, and detached from the
+ * document. Called for actions that must not be available for the current
+ * decision. No click handler is attached to these buttons either, so there is
+ * nothing left to invoke.
+ * @param {HTMLElement | null} button
+ */
+function disableAction(button) {
+  if (!button) return;
+  button.hidden = true;
+  if ("disabled" in button) {
+    button.disabled = true;
+  }
+  button.remove();
 }
 
 /**

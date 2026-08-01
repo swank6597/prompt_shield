@@ -30,6 +30,26 @@ internal terminology, or processes)?
 - "Explain OAuth2." -> public knowledge is sufficient. Not enterprise-specific.
 - "Explain our OAuth2 implementation." -> requires knowing this
   enterprise's specific implementation. Enterprise-specific.
+- "Summarize why GDPR, PCI DSS, and ISO 27001 matter for a company that
+  processes digital payments." -> these are published standards, so public
+  knowledge is sufficient. Not enterprise-specific, even though the knowledge
+  base separately documents this enterprise's own compliance posture. Naming a
+  framework describes the topic, not where the answer comes from - set the
+  matching impacts* flag below and still leave requiresEnterpriseKnowledge
+  false.
+- "What is our current PCI DSS compliance status?" -> requires this
+  enterprise's own audit state and system inventory. Enterprise-specific.
+- "Which teams are typically involved in reviewing a new third-party vendor
+  before onboarding?" -> asks how organizations generally work, not how this
+  one works. Public knowledge is sufficient, so
+  requiresEnterpriseKnowledge: false. An internal policy document that happens
+  to answer it does not change that - it means this enterprise wrote down a
+  common practice, not that the question asked about this enterprise. Words
+  like "typically", "generally", or "in general" lean public, but weigh them as
+  a signal rather than a rule - "which team typically owns Mercury Payments
+  incidents?" names an internal system and is enterprise-specific.
+- "Which teams sign off on vendor onboarding in our GRC workflow?" -> names
+  this enterprise's own process and tooling. Enterprise-specific.
 - A prompt naming an internal service, internal-only terminology, or an
   internal codename found in the retrieved knowledge snippet is a strong
   signal - but the deciding factor is always the prompt's own content,

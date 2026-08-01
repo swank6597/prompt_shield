@@ -143,6 +143,18 @@ docker-compose.override.yml
 .docker/
 
 # =============================================================================
+# Threshold-calibration artifacts (scripts/calibration/)
+# =============================================================================
+# The scripts are committed; their outputs are not. Every file below is
+# regenerable from tests/PromptShield_TestSuite.xlsx plus knowledge/ in about a
+# minute, and suite_scores*.json in particular is large and churns on any corpus
+# edit. e2e_results.json additionally holds prompt text and LLM verdicts.
+scripts/calibration/suite_cases.json
+scripts/calibration/suite_scores*.json
+scripts/calibration/e2e_results.json
+scripts/calibration/report*.txt
+
+# =============================================================================
 # Ollama / Model Files (large binary files should not be in repo)
 # =============================================================================
 *.gguf

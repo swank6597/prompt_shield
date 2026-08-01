@@ -171,12 +171,40 @@ For any hybrid score in [0.0, 1.0] and any valid threshold pair where
 public_threshold < enterprise_threshold, the routing decision SHALL be
 exactly one of:
   - semantic_confirmed_public (needs_llm=False) when hybrid_score < public_threshold
-  - semantic_confirmed_enterprise (needs_llm=False) when hybrid_score >= enterprise_threshold
+  - enterprise_hybrid_needs_review (needs_llm=True) when hybrid_score >= enterprise_threshold
   - true_ambiguity (needs_llm=True) when public_threshold <= hybrid_score < enterprise_threshold
 
 The three cases are mutually exclusive and exhaustive.
 
-Validates: Requirements 6.2, 6.3, 6.4
+Validates: Requirements 6.2, 6.4
+Validates: specs/lexical-semantic-fix/plan.md Task 3.3 (supersedes Requirement 6.3)
+
+── Why the enterprise case changed ──────────────────────────────────────────
+Requirement 6.3 specified semantic_confirmed_enterprise with needs_llm=False.
+specs/lexical-semantic-fix Task 3.3 replaced it with
+enterprise_hybrid_needs_review and needs_llm=True. Skipping the LLM there let
+the pre-classifier hand the policy engine a synthetic ECI asserting
+containsInternalArchitecture=True at confidence 0.9, which rules.json blocks on
+at eci_min_confidence=0.7 - a deterministic BLOCK from a score, with no review.
+
+The substantive reason: embedding similarity is a RETRIEVAL signal, exactly as
+TF-IDF is (Task 2.1 removed the identical construct from the lexical tier). A
+high cosine score means the prompt resembles a document in the corpus, i.e. it
+is ABOUT a documented topic - which is not evidence that answering it discloses
+anything. Two retrieval signals agreeing makes the retrieval more confident, not
+the disclosure judgement more valid.
+
+Measured, the first time this path was ever reachable (the semantic dependencies
+were only installed in Task 3.1): suite case #10, "what are NovaBank's three
+enterprise data classification levels", expected ALLOW / WARN, scored
+lex=0.3781 AMBIGUOUS / sem=0.8890 / hybrid=0.6846 and was BLOCKed at
+riskScore=54 with no LLM review. It clears the 0.55 threshold by +0.1346, so
+this is not a calibration miss; HYBRID_* tuning belongs to Task 8.2.
+
+Note that only the PUBLIC branch still skips the LLM. That asymmetry is
+deliberate: asserting SAFE from a low score errs toward review-by-the-user
+downstream, while asserting ENTERPRISE from a high score ends the pipeline in a
+BLOCK nobody can appeal.
 """
 
 
@@ -186,11 +214,15 @@ def route_by_hybrid_score(hybrid_score: float, public_threshold: float, enterpri
     """
     Determine routing decision based on hybrid score and thresholds.
     Returns (decision_path, needs_llm).
+
+    Mirrors the tier-2 branch of ai/pre_classifier.pre_classify(). The
+    enterprise arm returns needs_llm=True since specs/lexical-semantic-fix
+    Task 3.3 - see the module docstring above for why.
     """
     if hybrid_score < public_threshold:
         return "semantic_confirmed_public", False
     elif hybrid_score >= enterprise_threshold:
-        return "semantic_confirmed_enterprise", False
+        return "enterprise_hybrid_needs_review", True
     else:
         return "true_ambiguity", True
 
@@ -211,10 +243,16 @@ threshold_strategy = floats(min_value=0.01, max_value=0.99, allow_nan=False, all
 @given(hybrid_score=hybrid_score_strategy)
 def test_hybrid_routing_with_default_thresholds(hybrid_score: float):
     """
-    **Validates: Requirements 6.2, 6.3, 6.4**
+    **Validates: Requirements 6.2, 6.4**
+    **Validates: specs/lexical-semantic-fix/plan.md Task 3.3**
 
     With default thresholds (public=0.30, enterprise=0.55), the routing decision
     SHALL match the expected case based on threshold boundaries.
+
+    This file tests the threshold ARITHMETIC against a pure mirror of the
+    branch. The real pre_classify() is exercised on the same paths by
+    tests/test_pre_classifier_routing.py Properties 6e and 6f - 6f is the one
+    that fails if a path skips the LLM with a BLOCK-tripping ECI.
     """
     import config
 
@@ -232,12 +270,18 @@ def test_hybrid_routing_with_default_thresholds(hybrid_score: float):
             f"Expected needs_llm=False for semantic_confirmed_public, got {needs_llm}"
         )
     elif hybrid_score >= enterprise_threshold:
-        assert decision_path == "semantic_confirmed_enterprise", (
-            f"Expected semantic_confirmed_enterprise for score {hybrid_score} >= {enterprise_threshold}, "
-            f"got {decision_path}"
+        # WHY this is enterprise_hybrid_needs_review with needs_llm=True and not
+        # semantic_confirmed_enterprise with needs_llm=False (Requirement 6.3):
+        # a high hybrid score is two retrieval signals agreeing that the prompt
+        # resembles the corpus. That is a reason to review it, not a verdict on
+        # whether it discloses anything. See the Property 8 docstring for the
+        # measured case (#10, expected ALLOW / WARN, BLOCKed at hybrid=0.6846).
+        assert decision_path == "enterprise_hybrid_needs_review", (
+            f"Expected enterprise_hybrid_needs_review for score {hybrid_score} >= "
+            f"{enterprise_threshold}, got {decision_path}"
         )
-        assert needs_llm is False, (
-            f"Expected needs_llm=False for semantic_confirmed_enterprise, got {needs_llm}"
+        assert needs_llm is True, (
+            f"Expected needs_llm=True for enterprise_hybrid_needs_review, got {needs_llm}"
         )
     else:
         assert decision_path == "true_ambiguity", (
@@ -259,7 +303,8 @@ def test_hybrid_routing_with_configurable_thresholds(
     hybrid_score: float, public_threshold: float, enterprise_threshold: float
 ):
     """
-    **Validates: Requirements 6.2, 6.3, 6.4**
+    **Validates: Requirements 6.2, 6.4**
+    **Validates: specs/lexical-semantic-fix/plan.md Task 3.3**
 
     For any valid threshold pair (public < enterprise) and any hybrid score in [0.0, 1.0],
     the routing decision SHALL match exactly one of the three cases.
@@ -278,12 +323,15 @@ def test_hybrid_routing_with_configurable_thresholds(
             f"Expected needs_llm=False for semantic_confirmed_public, got {needs_llm}"
         )
     elif hybrid_score >= enterprise_threshold:
-        assert decision_path == "semantic_confirmed_enterprise", (
-            f"Expected semantic_confirmed_enterprise for score {hybrid_score} >= {enterprise_threshold}, "
-            f"got {decision_path}"
+        # Task 3.3: routes to review rather than self-asserting an enterprise
+        # verdict, at every threshold pair - not just the configured default.
+        # See the Property 8 docstring.
+        assert decision_path == "enterprise_hybrid_needs_review", (
+            f"Expected enterprise_hybrid_needs_review for score {hybrid_score} >= "
+            f"{enterprise_threshold}, got {decision_path}"
         )
-        assert needs_llm is False, (
-            f"Expected needs_llm=False for semantic_confirmed_enterprise, got {needs_llm}"
+        assert needs_llm is True, (
+            f"Expected needs_llm=True for enterprise_hybrid_needs_review, got {needs_llm}"
         )
     else:
         assert decision_path == "true_ambiguity", (
@@ -305,7 +353,8 @@ def test_hybrid_routing_mutually_exclusive_and_exhaustive(
     hybrid_score: float, public_threshold: float, enterprise_threshold: float
 ):
     """
-    **Validates: Requirements 6.2, 6.3, 6.4**
+    **Validates: Requirements 6.2, 6.4**
+    **Validates: specs/lexical-semantic-fix/plan.md Task 3.3**
 
     For any hybrid score and valid threshold pair, exactly one of the three routing
     conditions is true: the cases are mutually exclusive and exhaustive.
@@ -333,7 +382,9 @@ def test_hybrid_routing_mutually_exclusive_and_exhaustive(
             f"Routing mismatch: condition says public but got {decision_path}"
         )
     elif is_enterprise:
-        assert decision_path == "semantic_confirmed_enterprise", (
+        # Renamed by Task 3.3: the enterprise arm requests a review instead of
+        # asserting a verdict. Exclusivity/exhaustivity is unchanged.
+        assert decision_path == "enterprise_hybrid_needs_review", (
             f"Routing mismatch: condition says enterprise but got {decision_path}"
         )
     else:
