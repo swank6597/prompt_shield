@@ -115,7 +115,6 @@ class LexicalEngine:
 class LexicalConfig:
     public_threshold: float = 0.15
     enterprise_threshold: float = 0.45
-    high_df_cutoff: float = 0.60  # tokens in >60% docs get near-zero IDF
 
 @dataclass
 class LexicalResult:
@@ -130,8 +129,10 @@ class LexicalResult:
 1. Tokenize prompt: regex `[a-zA-Z][a-zA-Z0-9_-]+`, lowercase, filter len > 2
 2. For each prompt token found in the inverted index:
    - Look up document frequency `df(t)`
-   - Compute `idf(t) = log(N / df(t))` where N = total docs
-   - If `df(t) / N > 0.60`: assign `idf(t) ≈ 0` (near-zero weight for generic terms)
+   - Compute smoothed `idf(t) = log((N + 1) / (df(t) + 1)) + 1` where N = total docs
+     (never zero, even for a token in every document - revised from an earlier
+     hard >60%-df cutoff that zeroed out the organization's own ubiquitous
+     product/service names along with generic terms)
    - Accumulate `score += tf(t, prompt) * idf(t)`
 3. Normalize score to 0.0–1.0 range (divide by max possible score for prompt length)
 4. Apply verdict thresholds
@@ -297,16 +298,16 @@ inverted_index: dict[str, dict] = {
         "postings": [(0, 7), (3, 2), (8, 1), (15, 4), (22, 1)],
     },
     "service": {
-        "df": 38,                             # >60% of 47 docs → near-zero IDF
+        "df": 38,                             # >80% of 47 docs → still weighted, just low
         "postings": [...],
     },
 }
 
-# Metadata
+# Metadata (smoothed IDF: log((N+1)/(df+1)) + 1, N=47)
 idf_cache: dict[str, float] = {
-    "mercury": 3.16,    # log(47/2) = high weight (rare term)
-    "payment": 2.24,    # log(47/5) = medium weight
-    "service": 0.01,    # near-zero (generic term)
+    "mercury": 3.77,    # rare term - high weight
+    "payment": 3.08,    # medium document frequency - medium weight
+    "service": 1.21,    # common term - low weight, but never zero
 }
 ```
 
@@ -367,9 +368,9 @@ idf_cache: dict[str, float] = {
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-### Property 1: IDF Correctness with High-Frequency Dampening
+### Property 1: Smoothed IDF Correctness
 
-*For any* corpus of documents and *for any* token present in the corpus, the computed IDF weight SHALL equal `log(N / df(t))` when the token appears in 60% or fewer of the documents, and SHALL be near-zero (< 0.01) when the token appears in more than 60% of documents.
+*For any* corpus of documents and *for any* token present in the corpus, the computed IDF weight SHALL equal `log((N + 1) / (df(t) + 1)) + 1`, and SHALL always be strictly positive (>= 1.0), regardless of how high the token's document frequency is.
 
 **Validates: Requirements 1.2, 1.3**
 
@@ -514,7 +515,7 @@ This feature is well-suited for property-based testing because the core logic co
   - Prompt with only stopwords → score 0.0
   - Single-character tokens → filtered out
   - Knowledge base with 0 documents → graceful handling
-  - All documents identical → all tokens get near-zero IDF
+  - All documents identical → all tokens get the same minimum (df=N) smoothed IDF, still >= 1.0
 
 ### Integration Tests
 

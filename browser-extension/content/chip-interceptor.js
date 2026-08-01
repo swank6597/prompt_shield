@@ -336,7 +336,7 @@ export function createChipInterceptor({ Logger, scanClient, reviewDialog, chipSe
         return;
       }
 
-      if (normalizedStatus === "SANITIZE" || normalizedStatus === "BLOCK") {
+      if (normalizedStatus === "SANITIZE" || normalizedStatus === "WARN" || normalizedStatus === "BLOCK") {
         Logger.info(`Chip scan decision: ${normalizedStatus}`);
         if (result.reason) {
           Logger.info(result.reason);

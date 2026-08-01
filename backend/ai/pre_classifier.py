@@ -21,6 +21,13 @@
 #     hybrid_score >= 0.55 -> SKIP (semantic_confirmed_enterprise)
 #     0.30 <= hybrid_score < 0.55 -> NEEDS LLM (true_ambiguity)
 #
+# Note: skipping the LLM here means the resulting ECI's `confidence` is not
+# a flat constant - _build_enterprise_eci() scales it by how far the
+# triggering score clears its threshold, so a score that only just crosses
+# ENTERPRISE_LIKELY/hybrid-enterprise (e.g. from a couple of weak/generic
+# matched terms) lands below policy_engine's block_internal_architecture_or_code
+# eci_min_confidence=0.7 gate and falls through to WARN instead of BLOCK.
+#
 # Priority order: secrets > PII+PUBLIC > lexical verdict > semantic hybrid
 #
 # Graceful degradation:
@@ -322,7 +329,9 @@ def pre_classify(prompt: str, masked_text: str, presidio_result: dict) -> dict:
             "needs_llm": False,
             "reason": f"Hybrid score above enterprise threshold (hybrid={hybrid_score:.4f} >= {config.HYBRID_ENTERPRISE_THRESHOLD})",
             "decision_path": "semantic_confirmed_enterprise",
-            "pre_eci": _build_enterprise_eci(lexical_result),
+            "pre_eci": _build_enterprise_eci(
+                lexical_result, hybrid_score, config.HYBRID_ENTERPRISE_THRESHOLD
+            ),
             "knowledge_hits": knowledge_hits,
             "lexical_result": lexical_dict,
             "semantic_result": semantic_dict,
@@ -497,8 +506,41 @@ def _build_pii_only_eci(entity_types: set) -> dict:
     }
 
 
-def _build_enterprise_eci(lexical_result) -> dict:
-    """Enterprise context detected via lexical/hybrid scoring."""
+# Confidence band for deterministic enterprise-detection ECIs: a score right
+# at its threshold gets CONFIDENCE_FLOOR (below rules.json's
+# eci_min_confidence=0.7 for BLOCK, but above 0.5 for WARN), a score at 1.0
+# gets CONFIDENCE_CEILING. This keeps a borderline TF-IDF/hybrid match (e.g.
+# driven by a couple of weak/generic matched terms) from auto-BLOCKing with
+# the same certainty as a strong, unambiguous match.
+_ENTERPRISE_CONFIDENCE_FLOOR = 0.55
+_ENTERPRISE_CONFIDENCE_CEILING = 0.95
+
+
+def _build_enterprise_eci(lexical_result, score: float | None = None, threshold: float | None = None) -> dict:
+    """
+    Enterprise context detected via lexical/hybrid scoring.
+
+    Args:
+        lexical_result: LexicalResult used for reasoning text (top doc, matched terms).
+        score: The score that actually triggered this decision (tfidf_score for the
+               lexical path, hybrid_score for the hybrid path). Defaults to
+               lexical_result.tfidf_score.
+        threshold: The threshold `score` cleared to get here. Defaults to
+                   config.TFIDF_ENTERPRISE_THRESHOLD.
+    """
+    if score is None:
+        score = lexical_result.tfidf_score
+    if threshold is None:
+        threshold = config.TFIDF_ENTERPRISE_THRESHOLD
+
+    span = max(1.0 - threshold, 1e-6)
+    margin = min(max((score - threshold) / span, 0.0), 1.0)
+    confidence = round(
+        _ENTERPRISE_CONFIDENCE_FLOOR
+        + margin * (_ENTERPRISE_CONFIDENCE_CEILING - _ENTERPRISE_CONFIDENCE_FLOOR),
+        4,
+    )
+
     top_doc = lexical_result.top_docs[0]["filename"] if lexical_result.top_docs else "unknown"
     return {
         "intent": "Other",
@@ -513,9 +555,9 @@ def _build_enterprise_eci(lexical_result) -> dict:
         "impactsPCIDSS": False,
         "impactsHIPAA": False,
         "impactsISO27001": True,
-        "confidence": 0.9,
+        "confidence": confidence,
         "reasoning": [
-            f"Enterprise context detected (TF-IDF score={lexical_result.tfidf_score:.4f}, "
+            f"Enterprise context detected (score={score:.4f}, threshold={threshold:.2f}, "
             f"verdict={lexical_result.verdict})",
             f"Top matching document: {top_doc}",
             f"Matched terms: {', '.join(lexical_result.matched_terms[:10])}",

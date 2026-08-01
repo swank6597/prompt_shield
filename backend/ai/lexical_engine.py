@@ -2,7 +2,7 @@
 # TF-IDF scoring engine with inverted index for fast deterministic
 # prompt scoring against the enterprise knowledge base. Replaces the
 # naive token-overlap approach in keyword_search.py with proper term
-# weighting and high-frequency dampening (no manual stopword list).
+# weighting (smoothed IDF), and stopword filtering.
 
 import math
 import os
@@ -20,13 +20,18 @@ import config  # noqa: E402
 
 log = get_logger("lexical_engine")
 
+try:
+    from spacy.lang.en.stop_words import STOP_WORDS as _STOPWORDS
+except Exception as _exc:  # pragma: no cover - spaCy is a hard dep in practice
+    log.warning("spaCy stopword list unavailable (%s); falling back to empty stopword set", _exc)
+    _STOPWORDS = frozenset()
+
 
 @dataclass
 class LexicalConfig:
     """Configuration for the Lexical Engine thresholds."""
     public_threshold: float = config.TFIDF_PUBLIC_THRESHOLD
     enterprise_threshold: float = config.TFIDF_ENTERPRISE_THRESHOLD
-    high_df_cutoff: float = 0.60  # tokens in >60% docs get near-zero IDF
 
 
 @dataclass
@@ -71,17 +76,40 @@ class LexicalEngine:
         Tokenize text into lowercase alphanumeric tokens.
 
         Uses regex [a-zA-Z][a-zA-Z0-9_-]+ to extract tokens, converts
-        to lowercase, and filters out tokens with length <= 2.
-        No stopword list — high-frequency suppression is handled by
-        IDF dampening.
+        to lowercase, filters out tokens with length <= 2, and drops
+        common English stopwords (spaCy's list). Stopwords were
+        previously left to IDF dampening alone, but on a small corpus
+        a stopword can still appear in few enough docs to get a high
+        IDF weight and register as a "matched enterprise term".
         """
         words = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]+", text.lower())
-        return [w for w in words if len(w) > 2]
+        return [w for w in words if len(w) > 2 and w not in _STOPWORDS]
+
+    def _smoothed_idf(self, df: int) -> float:
+        """
+        Smoothed IDF: log((N + 1) / (df + 1)) + 1.
+
+        The classic log(N/df) formula hits exactly 0 as df approaches N,
+        which used to be clamped to a hard 0.0 for any token above a 60%
+        document-frequency cutoff ("high-frequency dampening"). That
+        cutoff was borrowed from generic stopword suppression, but this
+        knowledge base is single-tenant - a token appearing in most
+        documents is often the organization's own core product/service
+        name (e.g. its identity or payment service), which is maximally
+        significant, not generic. A hard zero silently made those terms
+        contribute nothing to scoring regardless of context (confirmed:
+        "What does our identity service do?" scored 0.0/PUBLIC and never
+        even reached the semantic-engine tier). The +1 smoothing (same
+        idea as sklearn's default TfidfVectorizer) guarantees every
+        indexed token gets a strictly positive weight - still lower for
+        common terms, never zero.
+        """
+        return math.log((self.num_docs + 1) / (df + 1)) + 1.0
 
     def _build_index(self, documents: list[dict]) -> None:
         """
         Build inverted index: token -> {df, postings[(doc_id, tf)]}.
-        Also precomputes IDF values with high-frequency dampening.
+        Also precomputes smoothed IDF values (see _smoothed_idf).
         """
         for doc_id, doc in enumerate(documents):
             tokens = self._tokenize(doc.get("content", ""))
@@ -93,16 +121,8 @@ class LexicalEngine:
                 self.inverted_index[token]["postings"].append((doc_id, tf))
                 self.inverted_index[token]["df"] += 1
 
-        # Precompute IDF values with high-frequency dampening
         for token, entry in self.inverted_index.items():
-            df = max(entry["df"], 1)  # Guard against division by zero
-            ratio = df / self.num_docs
-
-            if ratio > self.config.high_df_cutoff:
-                # High-frequency dampening: near-zero IDF for generic terms
-                self.idf_cache[token] = 0.0
-            else:
-                self.idf_cache[token] = math.log(self.num_docs / df)
+            self.idf_cache[token] = self._smoothed_idf(entry["df"])
 
         log.info(
             "Built inverted index: %d unique tokens from %d documents",
@@ -150,14 +170,13 @@ class LexicalEngine:
         for token, tf in prompt_tf.items():
             if token in self.idf_cache:
                 idf = self.idf_cache[token]
-                if idf > 0.0:
-                    raw_score += tf * idf
-                    matched_terms.append(token)
+                raw_score += tf * idf
+                matched_terms.append(token)
 
-        # Compute max possible score for normalization:
-        # Each unique prompt token contributes at most tf * max_idf
-        # where max_idf = log(N / 1) = log(N) (rarest possible term)
-        max_idf = math.log(self.num_docs) if self.num_docs > 1 else 1.0
+        # Compute max possible score for normalization: each unique prompt
+        # token contributes at most tf * max_idf, where max_idf is the
+        # smoothed IDF of the rarest possible term (df=1).
+        max_idf = self._smoothed_idf(1)
         max_score = sum(tf * max_idf for tf in prompt_tf.values())
 
         # Normalize to 0.0-1.0
@@ -179,11 +198,10 @@ class LexicalEngine:
         for token, tf in prompt_tf.items():
             if token in self.inverted_index and token in self.idf_cache:
                 idf = self.idf_cache[token]
-                if idf > 0.0:
-                    for doc_id, _doc_tf in self.inverted_index[token]["postings"]:
-                        if doc_id not in doc_scores:
-                            doc_scores[doc_id] = 0.0
-                        doc_scores[doc_id] += tf * idf
+                for doc_id, _doc_tf in self.inverted_index[token]["postings"]:
+                    if doc_id not in doc_scores:
+                        doc_scores[doc_id] = 0.0
+                    doc_scores[doc_id] += tf * idf
 
         # Sort documents by score and take top matches
         sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
