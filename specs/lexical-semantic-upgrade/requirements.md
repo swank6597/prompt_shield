@@ -29,8 +29,8 @@ Replace the naive keyword-overlap scoring in `keyword_search.py` with a producti
 #### Acceptance Criteria
 
 1. WHEN the application starts, THE Lexical_Engine SHALL build an Inverted_Index from all documents loaded by the Context_Loader
-2. THE Lexical_Engine SHALL compute IDF values for each token using the formula log(N / df(t)) where N is the total document count and df(t) is the document frequency of token t
-3. WHEN a token appears in more than 60% of all documents, THE Lexical_Engine SHALL assign that token a near-zero IDF weight
+2. THE Lexical_Engine SHALL compute IDF values for each token using smoothed IDF: log((N + 1) / (df(t) + 1)) + 1, where N is the total document count and df(t) is the document frequency of token t
+3. THE Lexical_Engine SHALL NOT reduce a token's IDF weight to zero (or near-zero) purely because of high document frequency - on a single-tenant enterprise knowledge base, a token appearing in most documents is often the organization's own core product/service name and is maximally significant, not generic; smoothed IDF still down-weights common terms relative to rare ones, but every indexed token keeps a strictly positive (>= 1.0) weight
 4. THE Lexical_Engine SHALL complete index construction in under 2 seconds for up to 5000 documents
 5. THE Lexical_Engine SHALL consume no more than 5MB of RAM for index storage at 5000 documents
 

@@ -268,8 +268,9 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
       issues: payload.issues ?? [],
       eci: payload.eci,
       // A real policy BLOCK is meant to actually stop the send - unlike
-      // WARN/MASK (both surfaced here as SANITIZE), which stay
-      // user-overridable. See modal.js's ReviewDialogPayload.
+      // WARN (no entities masked, review-only) or MASK (surfaced as
+      // SANITIZE, has a real redacted version to send), both of which
+      // stay user-overridable. See modal.js's ReviewDialogPayload.
       allowOverride: payload.status !== "BLOCK"
     });
   }
@@ -461,7 +462,7 @@ export function createPromptShieldObserver({ Logger, detector, scanClient, revie
         return;
       }
 
-      if (normalizedStatus === "SANITIZE" || normalizedStatus === "BLOCK") {
+      if (normalizedStatus === "SANITIZE" || normalizedStatus === "WARN" || normalizedStatus === "BLOCK") {
         Logger.info(`Decision: ${normalizedStatus}`);
         if (result.reason) {
           Logger.info(result.reason);

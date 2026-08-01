@@ -46,11 +46,16 @@ log = get_logger("routes")
 
 router = APIRouter()
 
-# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK. The extension only
-# knows SAFE/SANITIZE/BLOCK - WARN and MASK both surface as SANITIZE.
+# policy_engine.decide() speaks ALLOW/WARN/MASK/BLOCK. WARN and MASK used to
+# both collapse to SANITIZE client-side, but that's misleading for WARN: no
+# entities were actually masked, so the review UI had nothing to offer under
+# a "SANITIZE" badge except "Send Original" (dashboard already showed the
+# real WARN decision, creating a visible mismatch between the two surfaces).
+# MASK still maps to SANITIZE since that's the one case where a real
+# sanitized/redacted version exists to send.
 DECISION_TO_STATUS = {
     "ALLOW": "SAFE",
-    "WARN": "SANITIZE",
+    "WARN": "WARN",
     "MASK": "SANITIZE",
     "BLOCK": "BLOCK",
 }
