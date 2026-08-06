@@ -588,14 +588,9 @@ def _build_pii_only_eci(entity_types: set) -> dict:
 
 # _build_enterprise_eci() was DELETED by specs/lexical-semantic-fix task 3.3.
 #
-# Its whole purpose was to synthesise a high-confidence enterprise verdict
-# (containsInternalArchitecture=True, containsImplementationDetails=True,
-# confidence=0.9) out of a retrieval score. Both paths that called it -
-# ENTERPRISE_LIKELY (removed in task 2.1) and the hybrid enterprise branch
-# (removed in task 3.3) - now route to the LLM instead, so it had no callers
-# left. It is deleted rather than kept unused: an unused constructor for exactly
-# the ECI shape that trips rules.json's block_internal_architecture_or_code at
-# eci_min_confidence=0.7 is an invitation to reintroduce the defect on the next
-# fast path someone adds. Any future no-LLM enterprise verdict should have to
-# justify its own confidence value from measured data, not inherit a hardcoded
-# 0.9 from here.
+# Both the ENTERPRISE_LIKELY path and the hybrid enterprise branch now route to
+# the LLM instead, so it has no callers. Keeping an unused constructor for a
+# high-confidence enterprise ECI that trips rules.json's
+# block_internal_architecture_or_code at eci_min_confidence=0.7 would invite
+# reintroducing the defect on the next fast path. Any future no-LLM enterprise
+# verdict should justify its own confidence value from measured data.

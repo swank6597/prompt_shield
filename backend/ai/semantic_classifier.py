@@ -17,6 +17,7 @@
 
 import json
 import os
+import re
 import sys
 
 from jsonschema import validate, ValidationError
@@ -136,8 +137,35 @@ def skipped_result(reason: str) -> dict:
     }
 
 
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_code_fence(raw_text: str) -> str:
+    """
+    Strip a wrapping ```json ... ``` (or bare ``` ... ```) code fence.
+
+    system_prompt.md explicitly instructs "no markdown code fences", but
+    smaller/less steerable models (observed: Bedrock Nova Micro) wrap the
+    JSON in one anyway - likely because the schema-instructions block shown
+    in the prompt is itself rendered inside a fenced example for human
+    readability (see prompt_builder.py's _generate_schema_instructions()).
+    json.loads() fails immediately at "line 1 column 1" on a fenced response
+    since the first character is a backtick, not '{'. Stripping the fence
+    here is the reliable fix - the prompt instruction alone doesn't hold for
+    every provider/model, and a parse failure on both retry attempts (the
+    model repeats the same formatting) burns the retry budget for nothing
+    and forces a fail-closed fallback.
+    """
+    text = raw_text.strip()
+    match = _CODE_FENCE_RE.match(text)
+    if match:
+        return match.group(1).strip()
+    return text
+
+
 def _parse_and_validate(raw_text: str) -> dict:
-    parsed = json.loads(raw_text)          # raises json.JSONDecodeError
+    cleaned = _strip_code_fence(raw_text)
+    parsed = json.loads(cleaned)          # raises json.JSONDecodeError
     validate(instance=parsed, schema=_SCHEMA)  # raises jsonschema.ValidationError
     return parsed
 

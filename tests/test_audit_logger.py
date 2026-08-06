@@ -164,7 +164,7 @@ def test_enriched_columns_populated_when_llm_ran():
         entity_count=0, entity_types=[],
         eci={**FAKE_ECI, "containsSecrets": False, "impactsGDPR": False},
         risk_score=35, matched_rules=["warn_enterprise_architecture"],
-        decision="WARN", status="SANITIZE",
+        decision="WARN", status="WARN",
         presidio_ms=8.0, eci_ms=1200.0, policy_ms=0.3, total_ms=1208.3,
         reason="Enterprise architecture details requested.",
         llm_provider="groq", llm_model="llama-3.1-8b-instant",

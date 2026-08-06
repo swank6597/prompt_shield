@@ -11,7 +11,7 @@ The backend runs the full detection pipeline:
 3. **Pre-Classifier** (`ai/pre_classifier.py`) runs a three-tier lexical (TF-IDF) + semantic (FAISS/MiniLM) gate that resolves most prompts — trivial, secret, PII-only, public, or clearly-enterprise — **without an LLM call**; only genuinely ambiguous prompts are escalated
 4. **ECI Semantic Classifier** (only for escalated prompts) sends the masked prompt + retrieved enterprise knowledge to an LLM for context-aware classification
 5. **Policy Engine** combines Presidio findings + ECI classification into a final risk decision
-6. Return `SAFE`, `SANITIZE`, or `BLOCK` with issue details to the extension
+6. Return `SAFE`, `WARN`, `SANITIZE`, or `BLOCK` with issue details to the extension
 
 See [`ai/README.md`](ai/README.md) for the full pre-classifier/ECI pipeline and [`policy/README.md`](policy/README.md) for the decision layer.
 
@@ -266,11 +266,12 @@ Response when no sensitive data is found:
 
 ## Status Values
 
-| Status | Meaning |
-|---|---|
-| `SAFE` | No risk detected — prompt can be sent as-is |
-| `SANITIZE` | Sensitive data detected; sanitized prompt available for review |
-| `BLOCK` | High-risk content — policy engine blocks the prompt entirely |
+| Status | Policy decision | Meaning |
+|---|---|---|
+| `SAFE` | ALLOW | No risk detected — prompt can be sent as-is |
+| `WARN` | WARN | Enterprise-context risk flagged, but no entities were masked — nothing to sanitize, review and choose to send or cancel |
+| `SANITIZE` | MASK | PII/secrets detected and masked — a sanitized prompt is available to send instead of the original |
+| `BLOCK` | BLOCK | High-risk content — policy engine blocks the prompt entirely |
 
 ## Authentication
 

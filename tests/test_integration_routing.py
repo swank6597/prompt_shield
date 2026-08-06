@@ -157,10 +157,10 @@ def _run_full_pipeline(prompt: str, presidio_result: dict, verdict: str = "PUBLI
     }
     policy_result = decide_policy(detection, eci_raw)
 
-    # Map policy decision to user-facing status
+    # Map policy decision to user-facing status (mirrors routes.py)
     DECISION_TO_STATUS = {
         "ALLOW": "SAFE",
-        "WARN": "SANITIZE",
+        "WARN": "WARN",
         "MASK": "SANITIZE",
         "BLOCK": "BLOCK",
     }
@@ -267,7 +267,7 @@ class TestPiiOnlyNoEnterprise:
         assert pre_result["needs_llm"] is False
         # Policy should decide MASK or WARN for PII without enterprise context
         assert policy_result["decision"] in ("MASK", "WARN", "ALLOW")
-        assert status in ("SAFE", "SANITIZE")
+        assert status in ("SAFE", "SANITIZE", "WARN")
 
 
 class TestGeneralKnowledgePublic:
@@ -454,7 +454,7 @@ class TestTrueAmbiguityCallsLlm:
         )
         # LLM said enterprise -> policy should restrict
         assert policy_result["decision"] in ("BLOCK", "WARN", "MASK")
-        assert status in ("BLOCK", "SANITIZE")
+        assert status in ("BLOCK", "SANITIZE", "WARN")
 
     def test_ambiguous_below_public_threshold_routes_to_llm_review(self):
         """
@@ -869,4 +869,4 @@ class TestResponseStructure:
         assert isinstance(policy_result["matchedRules"], list)
 
         # Status mapping is valid
-        assert status in ("SAFE", "SANITIZE", "BLOCK")
+        assert status in ("SAFE", "SANITIZE", "WARN", "BLOCK")

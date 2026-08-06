@@ -464,6 +464,36 @@ assert.ok(
   );
 }
 
+// --- Test: WARN scan shows review dialog ---
+// Regression guard: WARN used to collapse into "SANITIZE" client-side. It's
+// now its own status (routes.py's DECISION_TO_STATUS), so the gating check
+// here must explicitly include it - otherwise it falls through to the
+// "unknown status, allow through" branch and silently bypasses review.
+
+{
+  const { interceptor, doc, dialogCalls } = createTestInterceptor({
+    status: "WARN",
+    reason: "Requires enterprise-specific knowledge to answer correctly.",
+    sanitizedPrompt: "What does our identity service do?",
+    issues: []
+  });
+  interceptor.start();
+
+  const chipElement = new MockElement("button", {
+    "data-followup-text": "What does our identity service do?",
+    _innerText: "Identity service"
+  });
+
+  const event = new MockEvent("click", chipElement);
+  doc._dispatchCapture("click", event);
+
+  await new Promise((r) => setTimeout(r, 10));
+
+  assert.strictEqual(dialogCalls.length, 1, "WARN should show review dialog");
+  assert.strictEqual(dialogCalls[0].action, "show", "Should call show");
+  assert.strictEqual(dialogCalls[0].payload.status, "WARN", "Dialog should show WARN status");
+}
+
 // --- Test: BLOCK scan shows review dialog with allowOverride false ---
 
 {

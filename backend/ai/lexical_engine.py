@@ -2,8 +2,8 @@
 # TF-IDF scoring engine with inverted index for fast deterministic
 # prompt scoring against the enterprise knowledge base. Replaces the
 # naive token-overlap approach in keyword_search.py with proper term
-# weighting, high-frequency dampening, and an explicit stoplist (see
-# STOPWORDS below for why dampening alone was not sufficient).
+# weighting (smoothed IDF), saturation normalization, and an explicit
+# stoplist (see STOPWORDS below for why IDF dampening alone is not sufficient).
 
 import math
 import os
@@ -115,7 +115,6 @@ class LexicalConfig:
     """Configuration for the Lexical Engine thresholds."""
     public_threshold: float = config.TFIDF_PUBLIC_THRESHOLD
     enterprise_threshold: float = config.TFIDF_ENTERPRISE_THRESHOLD
-    high_df_cutoff: float = 0.60  # tokens in >60% docs get near-zero IDF
     # Saturation constant for magnitude normalization: score = raw / (raw + K).
     # K is the raw score at which the normalized score reaches 0.5.
     saturation_k: float = config.LEXICAL_SATURATION_K
@@ -165,9 +164,8 @@ class LexicalEngine:
         Uses regex [a-zA-Z][a-zA-Z0-9_-]+ to extract tokens, converts to
         lowercase, drops tokens with length <= 2, and drops STOPWORDS.
 
-        IDF dampening (high_df_cutoff) suppresses terms that are *common* in
-        the corpus; the stoplist suppresses terms that are common in English
-        but rare in this corpus, which dampening by construction cannot see.
+        The stoplist suppresses terms that are common in English but rare in
+        this corpus, which IDF smoothing by construction cannot see.
         See the STOPWORDS comment for the measured IDF values.
 
         This is the single tokenization entry point for both _build_index()
@@ -177,10 +175,29 @@ class LexicalEngine:
         words = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]+", text.lower())
         return [w for w in words if len(w) > 2 and w not in STOPWORDS]
 
+    def _smoothed_idf(self, df: int) -> float:
+        """
+        Smoothed IDF: log((N + 1) / (df + 1)) + 1.
+
+        The classic log(N/df) formula hits exactly 0 as df approaches N,
+        which used to be clamped to a hard 0.0 for any token above a 60%
+        document-frequency cutoff ("high-frequency dampening"). That
+        cutoff was borrowed from generic stopword suppression, but this
+        knowledge base is single-tenant - a token appearing in most
+        documents is often the organization's own core product/service
+        name (e.g. its identity or payment service), which is maximally
+        significant, not generic. A hard zero silently made those terms
+        contribute nothing to scoring regardless of context. The +1
+        smoothing (same idea as sklearn's default TfidfVectorizer)
+        guarantees every indexed token gets a strictly positive weight -
+        still lower for common terms, never zero.
+        """
+        return math.log((self.num_docs + 1) / (df + 1)) + 1.0
+
     def _build_index(self, documents: list[dict]) -> None:
         """
         Build inverted index: token -> {df, postings[(doc_id, tf)]}.
-        Also precomputes IDF values with high-frequency dampening.
+        Also precomputes smoothed IDF values (see _smoothed_idf).
         """
         for doc_id, doc in enumerate(documents):
             tokens = self._tokenize(doc.get("content", ""))
@@ -192,16 +209,8 @@ class LexicalEngine:
                 self.inverted_index[token]["postings"].append((doc_id, tf))
                 self.inverted_index[token]["df"] += 1
 
-        # Precompute IDF values with high-frequency dampening
         for token, entry in self.inverted_index.items():
-            df = max(entry["df"], 1)  # Guard against division by zero
-            ratio = df / self.num_docs
-
-            if ratio > self.config.high_df_cutoff:
-                # High-frequency dampening: near-zero IDF for generic terms
-                self.idf_cache[token] = 0.0
-            else:
-                self.idf_cache[token] = math.log(self.num_docs / df)
+            self.idf_cache[token] = self._smoothed_idf(entry["df"])
 
         log.info(
             "Built inverted index: %d unique tokens from %d documents",
@@ -249,9 +258,8 @@ class LexicalEngine:
         for token, tf in prompt_tf.items():
             if token in self.idf_cache:
                 idf = self.idf_cache[token]
-                if idf > 0.0:
-                    raw_score += tf * idf
-                    matched_terms.append(token)
+                raw_score += tf * idf
+                matched_terms.append(token)
 
         # Normalize to 0.0-1.0 by saturating magnitude, NOT by density.
         #
@@ -289,11 +297,10 @@ class LexicalEngine:
         for token, tf in prompt_tf.items():
             if token in self.inverted_index and token in self.idf_cache:
                 idf = self.idf_cache[token]
-                if idf > 0.0:
-                    for doc_id, _doc_tf in self.inverted_index[token]["postings"]:
-                        if doc_id not in doc_scores:
-                            doc_scores[doc_id] = 0.0
-                        doc_scores[doc_id] += tf * idf
+                for doc_id, _doc_tf in self.inverted_index[token]["postings"]:
+                    if doc_id not in doc_scores:
+                        doc_scores[doc_id] = 0.0
+                    doc_scores[doc_id] += tf * idf
 
         # Sort documents by score and take top matches
         sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)

@@ -1,10 +1,14 @@
-# Feature: lexical-semantic-upgrade, Property 1: IDF Correctness with High-Frequency Dampening
+# Feature: lexical-semantic-upgrade, Property 1: Smoothed IDF Correctness
 # **Validates: Requirements 1.2, 1.3**
 #
 # Property 1: For any corpus of documents and for any token present in the
-# corpus, the computed IDF weight SHALL equal log(N / df(t)) when the token
-# appears in 60% or fewer of the documents, and SHALL be near-zero (< 0.01)
-# when the token appears in more than 60% of documents.
+# corpus, the computed IDF weight SHALL equal log((N + 1) / (df(t) + 1)) + 1,
+# and SHALL always be strictly positive (>= 1.0), regardless of how high the
+# token's document frequency is. A hard cutoff that zeroes out high-frequency
+# tokens was tried and reverted - on a single-tenant enterprise knowledge
+# base, a token appearing in most documents is often the organization's own
+# core product/service name (maximally significant), not a generic/stopword-
+# like term, so it must never be reduced to zero signal.
 
 import math
 import os
@@ -71,38 +75,30 @@ def corpus_strategy(draw):
 @settings(max_examples=200)
 def test_idf_correctness_with_high_frequency_dampening(documents):
     """
-    Property 1: IDF Correctness with High-Frequency Dampening.
+    Property 1: Smoothed IDF Correctness.
 
-    For every token in the IDF cache:
-    - If df/N <= 0.60: IDF == log(N / df) (within floating-point tolerance)
-    - If df/N > 0.60: IDF < 0.01
+    For every token in the IDF cache, IDF == log((N + 1) / (df + 1)) + 1,
+    and is always strictly positive - even for a token appearing in every
+    single document (df == N).
     """
     config = LexicalConfig()
-    config.high_df_cutoff = 0.60
-
     engine = LexicalEngine(documents, config=config)
 
     N = len(documents)
     assume(N > 0)
 
     for token, idf_value in engine.idf_cache.items():
-        # Get the document frequency from the inverted index
         df = engine.inverted_index[token]["df"]
-        ratio = df / N
 
-        if ratio > config.high_df_cutoff:
-            # High-frequency dampening: must be near-zero
-            assert idf_value < 0.01, (
-                f"Token '{token}' has df/N={ratio:.3f} > 0.60, "
-                f"but IDF={idf_value} (expected < 0.01)"
-            )
-        else:
-            # Standard IDF formula: log(N / df)
-            expected_idf = math.log(N / df)
-            assert math.isclose(idf_value, expected_idf, rel_tol=1e-9), (
-                f"Token '{token}' has df/N={ratio:.3f} <= 0.60, "
-                f"IDF={idf_value} but expected log({N}/{df})={expected_idf}"
-            )
+        expected_idf = math.log((N + 1) / (df + 1)) + 1.0
+        assert math.isclose(idf_value, expected_idf, rel_tol=1e-9), (
+            f"Token '{token}' has df={df}, N={N}, "
+            f"IDF={idf_value} but expected log(({N}+1)/({df}+1))+1={expected_idf}"
+        )
+        assert idf_value >= 1.0, (
+            f"Token '{token}' has df={df}, N={N}, IDF={idf_value} - "
+            "smoothed IDF must never drop below 1.0, even for a token in every document"
+        )
 
 
 # ---------------------------------------------------------------------------
